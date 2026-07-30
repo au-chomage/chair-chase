@@ -1,0 +1,66 @@
+Copyright (c) 2026 au chômage studios. All rights reserved.
+
+Chair Chase — the game, its source code, artwork, name, logo, and design.
+
+
+THE SHORT VERSION
+
+Look all you like. Learn from it. Don't republish it as your own, and don't
+sell it.
+
+
+WHAT YOU MAY DO
+
+You may play the game.
+
+You may read the source code. It is delivered to your browser in order to run,
+so reading it is unavoidable and entirely welcome. You may study how it works
+and learn from it, including by taking a local copy for that purpose.
+
+You may quote short excerpts of the code when discussing, teaching, reviewing,
+or reporting on it, with attribution.
+
+You may link to the game freely.
+
+
+WHAT YOU MAY NOT DO WITHOUT WRITTEN PERMISSION
+
+You may not host, publish, or otherwise make this game available under your own
+name, at your own address, or as part of any other product or service.
+
+You may not sell, license, or commercially exploit the game or any substantial
+part of it.
+
+You may not create and distribute a modified or derivative version.
+
+You may not use the name "Chair Chase", the logo, or the artwork for anything
+other than referring to this game.
+
+
+PERMISSION
+
+Permission for any of the above is granted readily and is usually a matter of
+asking. Get in touch at https://auchomage.com/
+
+
+THIRD-PARTY COMPONENTS
+
+This game is built on two open-source libraries, loaded from a CDN at runtime
+rather than included in this repository:
+
+  three.js  — MIT License — https://github.com/mrdoob/three.js
+  Tone.js   — MIT License — https://github.com/Tonejs/Tone.js
+
+They remain the property of their respective authors under their own terms.
+Nothing in this licence applies to them, and nothing here restricts your rights
+to use them directly.
+
+
+NO WARRANTY
+
+The game is provided "as is", without warranty of any kind, express or implied,
+including but not limited to the warranties of merchantability, fitness for a
+particular purpose, and non-infringement. In no event shall the authors or
+copyright holders be liable for any claim, damages, or other liability, whether
+in an action of contract, tort, or otherwise, arising from, out of, or in
+connection with the game or the use or other dealings in the game.
