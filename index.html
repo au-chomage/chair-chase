@@ -218,6 +218,12 @@
     border-radius:50%; border:2px solid rgba(53,182,196,.55); background:rgba(16,26,30,.55);
     color:#eaf7f9; font:inherit; font-size:clamp(17px,3.4vw,23px); }
   #tAbility:active { background:rgba(27,127,140,.85); }
+  #tPov { position:absolute; right:calc(18px + var(--sar));
+    bottom:calc(20px + var(--sab) + clamp(150px,32vw,210px) + clamp(64px,13.5vw,84px));
+    pointer-events:auto; touch-action:none; width:clamp(46px,10vw,60px); height:clamp(46px,10vw,60px);
+    border-radius:50%; border:2px solid rgba(53,182,196,.42); background:rgba(16,26,30,.5);
+    color:#cfe9ec; font:inherit; font-size:clamp(9px,1.9vw,11px); letter-spacing:.5px; }
+  #tPov.on { border-color:#5ce8f2; color:#5ce8f2; background:rgba(27,127,140,.7); }
   #tAbility.armed { border-color:#ffd34d; color:#ffd34d; }
   /* rotate prompt: racing needs the width, menus do not */
   #rotate { position:fixed; inset:0; z-index:30; display:none; flex-direction:column;
@@ -501,6 +507,7 @@
   <div class="k"><div class="keys"><div class="key">▲</div></div>Go</div>
   <div class="k"><div class="keys"><div class="key">Space</div></div>Boost</div>
   <div class="k"><div class="keys"><div class="key">V</div></div>Drift</div>
+  <div class="k"><div class="keys"><div class="key">F</div></div>View</div>
   <div class="k"><div class="keys"><div class="key">X</div></div>X Ability</div>
   <div class="k"><div class="keys"><div class="key">Esc</div></div>Pause</div>
 </div>
@@ -512,13 +519,14 @@
     <button class="go" id="restartBtn">Restart race</button>
     <button class="go alt" id="menuBtn">Main menu</button>
   </div>
-  <p id="pauseHint">Arrows / WASD to steer · Space to boost · V to drift · X Ability · Esc to pause</p>
+  <p id="pauseHint">Arrows / WASD to steer · Space to boost · V to drift · X Ability · F for first person · Esc to pause</p>
 </div>
 
 <div id="touch">
   <div id="stickZone"></div>
   <div id="stick"><div id="stickNub"></div></div>
   <button id="tAbility" aria-label="Ability">X</button>
+  <button id="tPov" aria-label="Toggle camera view">POV</button>
   <div id="touchPad">
     <button id="tDrift" aria-label="Drift">↯<b>DRIFT</b></button>
     <button id="tGas" aria-label="Accelerate">▲</button>
@@ -4208,6 +4216,9 @@ function startRace() {
   }
   playerIdx = 0;
   buildLiveOrder();
+  // Keep whichever view was chosen, but re-hide the new rider's torso.
+  camInit = false;
+  if (racers[0].upper) racers[0].upper.visible = !povMode;
   document.getElementById('start').classList.add('hidden');
   document.getElementById('results').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
@@ -5169,38 +5180,79 @@ function showResults(order) {
 // ---------- camera ----------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let camBank = 0, camInit = false, camKick = 0;
+let povMode = false;   // F toggles the seated view
 function updateCamera(dt) {
   const p = racers[playerIdx];
-  // Follow the direction of travel, not the direction the chair faces. Only a
-  // little of the slip is mixed in, which is what lets you see your own chair
-  // sideways instead of the camera rotating with it and hiding the drift.
-  const camDir = p.dir + p.slip * 0.28;
-  const fwd = new THREE.Vector3(Math.sin(camDir), 0, Math.cos(camDir));
   const speedK = Math.min(Math.abs(p.speed) / p.stats.maxSpeed, 1);
   const boosting = p.boostT > 0 || p.driftBoostT > 0;
+  // Ride height follows the mesh, so jumps and the idle bounce carry through.
+  const baseY = p.mesh.position.y;
 
-  // raised chase cam, angled down over the chair so the head-top shows; dips/pulls in with speed
-  const dist = 6.2 - speedK * 0.8;
-  const height = 3.9 - speedK * 0.45;
-  const target = p.pos.clone().addScaledVector(fwd, -dist).add(new THREE.Vector3(0, height, 0));
-  const lookTarget = p.pos.clone().addScaledVector(fwd, 6).add(new THREE.Vector3(0, 2.35, 0));
+  let target, lookTarget, targetFov, lerpPos, lerpLook;
+
+  if (povMode) {
+    // Seated view, eye level, just far enough forward to clear the rider's own
+    // head. Crucially this faces r.heading, where the chair points, NOT the
+    // direction of travel: in a drift you end up staring off across the corner
+    // while the track slides past sideways, which is the whole appeal.
+    const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+    // Bob in time with the legs pumping rather than an arbitrary sine, so the
+    // motion agrees with what the rider is doing.
+    const bob = Math.sin(p.legPhase * 2) * 0.05 * speedK;
+    target = new THREE.Vector3(p.pos.x, baseY + 2.9 + bob, p.pos.z).addScaledVector(f, 0.62);
+    lookTarget = new THREE.Vector3(p.pos.x, baseY + 2.62, p.pos.z).addScaledVector(f, 16);
+    targetFov = 80 + speedK * 18 + (boosting ? 10 : 0);
+    // Tight tracking: any lag here reads as the head detaching from the body.
+    lerpPos = 20; lerpLook = 18;
+  } else {
+    // Follow the direction of travel, not the direction the chair faces. Only a
+    // little of the slip is mixed in, which is what lets you see your own chair
+    // sideways instead of the camera rotating with it and hiding the drift.
+    const camDir = p.dir + p.slip * 0.28;
+    const fwd = new THREE.Vector3(Math.sin(camDir), 0, Math.cos(camDir));
+    // raised chase cam, angled down over the chair so the head-top shows; dips/pulls in with speed
+    const dist = 6.2 - speedK * 0.8;
+    const height = 3.9 - speedK * 0.45;
+    target = p.pos.clone().addScaledVector(fwd, -dist).add(new THREE.Vector3(0, height, 0));
+    lookTarget = p.pos.clone().addScaledVector(fwd, 6).add(new THREE.Vector3(0, 2.35, 0));
+    targetFov = 72 + speedK * 15 + (boosting ? 9 : 0);
+    lerpPos = 6.5; lerpLook = 8;
+  }
+
   if (!camInit) { camPos.copy(target); camLook.copy(lookTarget); camInit = true; }
-  else { camPos.lerp(target, Math.min(dt * 6.5, 1)); camLook.lerp(lookTarget, Math.min(dt * 8, 1)); }
+  else { camPos.lerp(target, Math.min(dt * lerpPos, 1)); camLook.lerp(lookTarget, Math.min(dt * lerpLook, 1)); }
   camera.position.copy(camPos);
   camera.up.set(0, 1, 0);
   camera.lookAt(camLook);
 
   // bank into turns + a little speed shake for liveliness
-  const bank = steerInput() * 0.07 * speedK + p.slip * 0.09;
+  const bank = povMode
+    ? steerInput() * 0.045 * speedK + p.slip * 0.05     // gentler inside the chair; full roll is sickening
+    : steerInput() * 0.07 * speedK + p.slip * 0.09;
   camBank += (bank - camBank) * Math.min(dt * 6, 1);
   camKick = Math.max(0, camKick - dt * 0.14);
   const shake = Math.sin(elapsed * 42) * (speedK * 0.006 + (boosting ? 0.012 : 0) + camKick);
   camera.rotateZ(camBank + shake);
 
   // wider lens that stretches with speed and boost for a tunnel feel
-  const targetFov = 72 + speedK * 15 + (boosting ? 9 : 0);
   camera.fov += (targetFov - camera.fov) * Math.min(dt * 5, 1);
   camera.updateProjectionMatrix();
+}
+
+// Swapping seats moves the camera a long way, so the transition is cut rather
+// than lerped: sweeping from behind the chair into the rider's skull looks like
+// a bug, not a flourish.
+function setPov(on) {
+  if (povMode === on) return;
+  povMode = on;
+  camInit = false;
+  const p = racers[playerIdx];
+  // The rider's torso and head sit exactly where the camera now is, so they go.
+  // The chair, the legs and the shadow all stay, which keeps you anchored.
+  if (p && p.upper) p.upper.visible = !on;
+  const b = document.getElementById('tPov');
+  if (b) b.classList.toggle('on', on);
+  if (typeof Sound !== 'undefined' && Sound.click) Sound.click();
 }
 
 // ---------- main loop ----------
@@ -5344,6 +5396,7 @@ const isTypingTarget = e => {
 
 addEventListener('keydown', e => {
   if (isTypingTarget(e)) return;
+  if (e.code === 'KeyF' && mode === 'race') { setPov(!povMode); e.preventDefault(); return; }
   if (e.code === 'Escape') {
     if (mode === 'menu') { document.getElementById('backBtn').click(); e.preventDefault(); return; }
     if (mode === 'race' && running && !raceOver) { paused ? resumeGame() : pauseGame(); e.preventDefault(); return; }
@@ -5424,6 +5477,8 @@ bindTouchBtn('tGas', 'up'); bindTouchBtn('tBoost', 'boost'); bindTouchBtn('tDrif
   zone.addEventListener('touchend', end, { passive: false });
   zone.addEventListener('touchcancel', end, { passive: false });
   if (abil) abil.addEventListener('touchstart', e => { e.preventDefault(); input.ability = true; }, { passive: false });
+  const pov = document.getElementById('tPov');
+  if (pov) pov.addEventListener('touchstart', e => { e.preventDefault(); setPov(!povMode); }, { passive: false });
 })();
 
 // Racing wants the width. Menus are fine either way, so the prompt only appears
@@ -5500,7 +5555,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
