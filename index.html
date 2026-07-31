@@ -736,7 +736,7 @@ const Sound = (() => {
 // ================= end audio =================
 
 const CHAIRS = {
-  gaming:  { name:'Gaming Chair',    desc:'Very fast, hard to steer', color:0xd32f2f, maxSpeed:50, accel:34, steer:1.55, grip:0.45 },
+  gaming:  { name:'Gaming Chair',    desc:'Very fast, hard to steer', color:0xd32f2f, maxSpeed:48.5, accel:34, steer:1.55, grip:0.45 },
   ergo:    { name:'Ergonomic Chair', desc:'Balanced all-rounder',     color:0x24262e, maxSpeed:45, accel:28, steer:2.1, grip:0.7 },
   folding: { name:'Folding Chair',   desc:'Slower, turns on a dime',  color:0x8a8f9c, maxSpeed:41, accel:25, steer:2.8, grip:0.92 },
   wheelchair: { name:'Wheelchair',   desc:'Quick off the line, super agile', color:0x2f7fbf, maxSpeed:43, accel:36, steer:2.4, grip:0.68 },
@@ -819,7 +819,32 @@ function pickRivalNames(n) {
 const MAPS = {
   office: { name:'Open Office', desc:'Tall sweeping open-plan circuit', floor:0x9aa3ad, wall:0xcbb894, road:0x8892a0,
             ceil:'#d9d3c6', lightTile:'#fff6dc', sky:0xd8d2c4, fog:0xd8d2c4,
-            path:[[117.5,63.3],[121.9,84.4],[122.2,106.2],[118.4,127.5],[110.8,147.1],[99.8,163.8],[66.4,203],[52.9,214.2],[38.1,222.3],[22.3,226.9],[6.2,228],[-9.8,225.5],[-37.6,215.1],[-52.7,208.4],[-67.3,200.3],[-81.5,190.9],[-95.1,180.2],[-108.1,168.3],[-120.4,155.2],[-144.2,125.9],[-153.7,108.8],[-158,88.6],[-156.4,67.7],[-149.2,48.9],[-116.3,7.9],[-107.8,-8.8],[-106.1,-28.6],[-111.7,-47.3],[-127.3,-78],[-131,-99.2],[-128.3,-120.7],[-119.6,-139.3],[-79.8,-195.1],[-67.2,-207.5],[-53.1,-216.7],[-38,-222.6],[-22.2,-224.8],[-6.4,-223.4],[27.4,-212.7],[43.4,-206.8],[59.2,-199.7],[74.5,-191.4],[89.5,-182],[104,-171.5],[126.2,-153.4],[138.1,-138.1],[143.9,-117.9],[142.6,-96.4],[134.5,-77.5],[111,-42.3],[104.3,-24.3],[101.6,-4.6],[103.2,15.3]] },
+            path:[
+      [26.8,-112.2], [-4,-111.1], [-32.6,-110.7], [-47.6,-109],
+      [-56.9,-105.7], [-62,-100.7], [-65.5,-95.6], [-69,-90.5],
+      [-75.8,-87], [-88.3,-84.9], [-103,-83.2], [-129.4,-81.8],
+      [-155.8,-79.9], [-180,-76.6], [-188.1,-72.4], [-194.1,-68],
+      [-198.3,-63.3], [-202.4,-58.6], [-204.4,-53.7], [-204.5,-48.5],
+      [-204.5,-43.4], [-204.1,-38.2], [-205.1,-32.9], [-207.6,-27.4],
+      [-212.1,-21.6], [-217.3,-15.8], [-224.8,-9.4], [-229.8,-2.6],
+      [-231.7,5.5], [-231.7,15.2], [-230.1,26.8], [-226.6,42.7],
+      [-222.2,59], [-217.7,68.5], [-212.9,76.2], [-207.2,81.4],
+      [-200.3,84.2], [-192.3,85.2], [-183.7,85.4], [-174.9,86.8],
+      [-167.1,92.3], [-159.6,100.3], [-151.9,106.6], [-143.4,110.4],
+      [-133.6,110.3], [-122.5,107.4], [-108.2,100.8], [-95.7,92],
+      [-86.2,81], [-79,67.8], [-73.7,52.8], [-68.6,37.8],
+      [-62.7,24.2], [-54.3,12.1], [-42.9,2.6], [-29,-4.4],
+      [-12.5,-9.9], [5.1,-13.6], [22.7,-15.8], [38.1,-16.9],
+      [45.2,-14.7], [51.8,-9.2], [59.6,-2], [67.8,4.2],
+      [75.5,6.8], [86.5,7.7], [104.1,8.6], [123.9,9.2],
+      [143.7,9], [162.4,6.8], [177.8,2.9], [196.5,-4.2],
+      [216.3,-15.6], [224.8,-24.1], [231.1,-32.5], [232.9,-41.3],
+      [231.4,-51.2], [228.4,-61.8], [221.5,-72.8], [214.6,-80.7],
+      [207,-86.4], [196.1,-87.5], [184.4,-87.8], [167.9,-84.7],
+      [158.4,-84.9], [150.3,-86.1], [143.9,-89.1], [139.1,-93.6],
+      [135.4,-99.3], [132.1,-105.2], [127.3,-110.2], [119.3,-113.6],
+      [108.1,-116], [88.7,-116.6], [55.7,-114.4]
+    ] },
   warehouse: { name:'Warehouse', desc:'Wide fast warehouse circuit', floor:0x7d7f85, wall:0xb08d57, road:0x6a6d73,
             ceil:'#b9bcc2', lightTile:'#eef4ff', sky:0xb4b8bf, fog:0xb4b8bf,
             path:[[230,13.3],[227.3,26.6],[218.8,38.9],[205.3,49.1],[188,56.4],[129.9,67.8],[109.9,72.5],[91.2,79],[74.1,87.1],[58.8,96.7],[21.9,126.9],[7,136.3],[-11.2,142.8],[-31.5,145.8],[-52.2,145.2],[-71.9,141],[-124,118.9],[-142,110.3],[-158.6,100.7],[-173.8,90.1],[-187.5,78.6],[-199.5,66.4],[-217.7,43.7],[-224.7,30.4],[-225.7,16.4],[-220.5,2.8],[-209.6,-9.3],[-193.9,-18.9],[-146.9,-40.8],[-131.2,-51],[-118.6,-62.9],[-109.3,-76.1],[-95.7,-108.6],[-87.2,-122.1],[-73.4,-133.7],[-55.4,-142.5],[-34.5,-147.8],[18.5,-151.9],[39.5,-151],[58.8,-145.6],[74.3,-136.3],[84.2,-124.2],[92.6,-92.5],[99.3,-78.9],[112.4,-67.4],[130.4,-59.2],[177.1,-49.8],[195.9,-44.3],[211.5,-35.5],[222.8,-24.3],[228.8,-11.4]] },
@@ -1336,10 +1361,16 @@ function buildStanding(cfg, pose) {
   add(SphG(0.3, 10, 10), skin, 0, 3.0, 0);
   addHeadgear(g, cfg, 3.0, 0);
   if (cfg.janitor) {
+    // The mop hangs from a pivot at hand height so it can be swung as a unit.
+    // Built in place previously, which left nothing to animate.
+    const mop = new THREE.Group();
+    mop.position.set(0.8, 2.0, 0.25);
     const pole = new THREE.Mesh(CylG(0.05, 0.05, 2.0, 8), lam(0x9a7b4a));
-    pole.position.set(0.8, 1.1, 0.25); g.add(pole);
+    pole.position.set(0, -0.9, 0); mop.add(pole);
     const mophead = new THREE.Mesh(SphG(0.3, 8, 8), lam(0xd9d2c0));
-    mophead.scale.y = 0.55; mophead.position.set(0.8, 0.24, 0.25); g.add(mophead);
+    mophead.scale.y = 0.55; mophead.position.set(0, -1.76, 0); mop.add(mophead);
+    g.add(mop);
+    g.userData.mop = mop;
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return g;
@@ -4163,7 +4194,9 @@ function makeRacer(chairKey, charCfg, isPlayer, gridSlot, charKey) {
       // proved a shade too quick to race against.
       skill: 0.91 + Math.random() * 0.11,
       look: 4 + Math.floor(Math.random() * 3),
-      mistakeT: 2 + Math.random() * 4, braking: 0, driftT: 0
+      mistakeT: 2 + Math.random() * 4, braking: 0, driftT: 0,
+      // stuck detection: where it was last checked, and the reverse-out timer
+      refX: pos.x, refZ: pos.z, stuckChk: 1.5, unstickT: 0, unstickSide: 1
     },
     name: isPlayer ? 'You' : null
   };
@@ -4317,6 +4350,7 @@ function updatePapers(dt) {
 }
 
 // ---------- pedestrians crossing the track ----------
+const JANITOR_CFGS = SPECTATORS.filter(c => c.janitor);
 function setupCrossers() {
   crossers = [];
   // People walk between buildings all day on a campus. An office corridor mid-race
@@ -4328,8 +4362,22 @@ function setupCrossers() {
     mesh.traverse(o => { if (o.isMesh) o.castShadow = false; });
     mesh.visible = false;
     scene.add(mesh);
-    crossers.push({ mesh, active: false, knocked: false,
+    crossers.push({ mesh, active: false, knocked: false, jan: false, phase: 'cross',
       cd: selMap === 'hq' ? 1 + Math.random() * 4 : 3 + Math.random() * 6, i: 0, side: 1, off: 0, speed: 0, kt: 0, vel: null });
+  }
+  // Janitors work the floor whatever the venue, so every map gets them. They
+  // spend most of their time sweeping at the edge and only occasionally step out,
+  // which is what makes the crossing worth watching for rather than constant.
+  const jn = selMap === 'carpark' ? 2 : 3;
+  for (let k = 0; k < jn; k++) {
+    const cfg = JANITOR_CFGS[k % JANITOR_CFGS.length];
+    const mesh = buildStanding(cfg, 'stand');
+    mesh.traverse(o => { if (o.isMesh) o.castShadow = false; });
+    mesh.visible = false;
+    scene.add(mesh);
+    crossers.push({ mesh, active: false, knocked: false, jan: true, phase: 'sweep',
+      cd: 2 + Math.random() * 8, i: 0, side: 1, off: 0, speed: 0, kt: 0, vel: null,
+      sweepT: 0, swing: Math.random() * 6.28 });
   }
 }
 const CROSS_START = TRACK_HALF + 4.5;
@@ -4341,6 +4389,33 @@ function spawnCrosser(c) {
   c.speed = 3.5 + Math.random() * 3;
   c.active = true; c.knocked = false;
   c.mesh.visible = true;
+  if (c.jan) {
+    // Start just off the racing line and work inwards. A janitor carries the mop
+    // rather than sprinting, so the crossing is slow and genuinely in the way.
+    c.phase = 'sweep';
+    c.sweepT = 4 + Math.random() * 7;
+    c.off = c.side * (CROSS_START + 1.5);
+    c.speed = 1.9 + Math.random() * 1.1;
+  }
+}
+
+// Sweeping: the mop swings across the body and the janitor shuffles a little
+// along the edge, so it reads as work rather than an idle pose.
+function updateJanitorSweep(c, dt) {
+  c.sweepT -= dt;
+  c.swing += dt * 2.4;
+  const swing = Math.sin(c.swing);
+  const n = wpNormal(c.i);
+  // drift slowly along the track edge while working
+  c.off = c.side * (CROSS_START + 1.5 + swing * 0.35);
+  const p = waypoints[c.i].clone().addScaledVector(n, c.off);
+  c.mesh.position.set(p.x, 0, p.z);
+  // face the track, with a slight sway into each stroke
+  const wd = n.clone().multiplyScalar(-c.side);
+  c.mesh.rotation.y = Math.atan2(wd.x, wd.z) + swing * 0.22;
+  const mop = c.mesh.userData.mop;
+  if (mop) { mop.rotation.z = swing * 0.5; mop.rotation.x = 0.32 + Math.cos(c.swing) * 0.12; }
+  if (c.sweepT <= 0) { c.phase = 'cross'; c.off = c.side * CROSS_START; }
 }
 function updateCrossers(dt) {
   for (const c of crossers) {
@@ -4352,20 +4427,29 @@ function updateCrossers(dt) {
       if (c.mesh.position.y <= 0.1 || c.kt > 1.8) {
         c.active = false; c.knocked = false; c.mesh.visible = false;
         c.mesh.rotation.set(0, 0, 0);
-        c.cd = CROSS_CD();
+        const mop = c.mesh.userData.mop;
+        if (mop) mop.rotation.set(0, 0, 0);
+        c.cd = c.jan ? 7 + Math.random() * 9 : CROSS_CD();
       }
       continue;
     }
     if (!c.active) { c.cd -= dt; if (c.cd <= 0) spawnCrosser(c); continue; }
+    if (c.jan && c.phase === 'sweep') { updateJanitorSweep(c, dt); continue; }
     c.off -= c.side * c.speed * dt;
     const n = wpNormal(c.i);
     const p = waypoints[c.i].clone().addScaledVector(n, c.off);
-    const bob = Math.abs(Math.sin((elapsed + c.i) * 7)) * 0.12;
+    const bob = Math.abs(Math.sin((elapsed + c.i) * (c.jan ? 4.5 : 7))) * 0.12;
     c.mesh.position.set(p.x, bob, p.z);
     const wd = n.clone().multiplyScalar(-c.side);
     c.mesh.rotation.y = Math.atan2(wd.x, wd.z);
+    // carried upright while walking, with the head of the mop swinging gently
+    if (c.jan) {
+      const mop = c.mesh.userData.mop;
+      if (mop) { mop.rotation.z = Math.sin(elapsed * 4.5) * 0.12; mop.rotation.x = 0.1; }
+    }
     if (c.off * c.side <= -CROSS_START) { // reached the far side
-      c.active = false; c.mesh.visible = false; c.cd = CROSS_CD();
+      c.active = false; c.mesh.visible = false;
+      c.cd = c.jan ? 7 + Math.random() * 9 : CROSS_CD();
     }
   }
 }
@@ -4484,6 +4568,33 @@ function updateRacer(r, dt, controlsOn) {
     }
   } else {
     const ai = r.ai;
+
+    // Hitting a prop pushes a racer straight back out along the line it came in
+    // on. A human reverses; the AI just drives into it again, and if the pin
+    // point happens to sit more than 9 units from its next waypoint the target
+    // never advances and it grinds there for the rest of the race. So: notice no
+    // progress, then back out deliberately and turn toward the racing line.
+    if (controlsOn && !r.finished) {
+      ai.stuckChk -= dt;
+      if (ai.stuckChk <= 0) {
+        const dxs = r.pos.x - ai.refX, dzs = r.pos.z - ai.refZ;
+        if (ai.unstickT <= 0 && Math.sqrt(dxs * dxs + dzs * dzs) < 2.0) {
+          ai.unstickT = 1.0;
+          const tw = waypoints[(r.nextWp + 3) % WP_COUNT];
+          ai.unstickSide = normAngle(Math.atan2(tw.x - r.pos.x, tw.z - r.pos.z) - r.dir) > 0 ? 1 : -1;
+        }
+        ai.refX = r.pos.x; ai.refZ = r.pos.z; ai.stuckChk = 1.5;
+      }
+    }
+    if (ai.unstickT > 0) {
+      // Backing out. Only the AI's decisions are skipped; the movement,
+      // collision and lap-counting below still run exactly as normal.
+      ai.unstickT -= dt;
+      r.dir += ai.unstickSide * 1.6 * dt;
+      r.slip += (0 - r.slip) * Math.min(dt * 6, 1);
+      r.speed -= S.accel * 1.2 * dt;
+    } else {
+
     // Lapses are a lift rather than a stamp on the brakes. Frequent enough that a
     // rival is beatable, rare enough that it does not read as random.
     ai.mistakeT -= dt;
@@ -4528,6 +4639,7 @@ function updateRacer(r, dt, controlsOn) {
         if (Math.abs(o.progress - r.progress) < 14) { odds = 0.03; break; }
       }
       if (Math.random() < odds) { r.boostT = 1.3; r.boost = 0; }
+    }
     }
   }
 
@@ -5555,7 +5667,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
