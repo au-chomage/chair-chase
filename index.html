@@ -5555,7 +5555,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
@@ -5762,5 +5762,12 @@ addEventListener('pagehide', () => { if (mode === 'race') bankRun(true); });
 
 showTitle();
 </script>
+
+<!-- Cloudflare Web Analytics. Loads after the game script, is cookieless, and
+     reports page views only. The token is public by design: it identifies the
+     site, not the visitor, and is visible in the page source of every site
+     using it. -->
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "e9d3e10530cf4811aa4f64b85d491de2"}'></script>
+<!-- End Cloudflare Web Analytics -->
 </body>
 </html>
