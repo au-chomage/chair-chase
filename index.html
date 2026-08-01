@@ -793,7 +793,12 @@ const Sound = (() => {
 const CHAIRS = {
   gaming:  { name:'Gaming Chair',    desc:'Very fast, hard to steer', color:0xd32f2f, maxSpeed:48.5, accel:34, steer:1.55, grip:0.45 },
   ergo:    { name:'Ergonomic Chair', desc:'Balanced all-rounder',     color:0x24262e, maxSpeed:45, accel:28, steer:2.1, grip:0.7 },
-  folding: { name:'Folding Chair',   desc:'Slower, turns on a dime',  color:0x8a8f9c, maxSpeed:41, accel:25, steer:2.8, grip:0.92 },
+  // Raised from 41. At 41 it lapped 4.6s off the pace, which is not a trade-off,
+  // it is just the worse chair. Acceleration was measured and does nothing here -
+  // on these circuits you sit at the ceiling almost the whole lap, so the ceiling
+  // is the only stat that moves lap times. Still the slowest by a clear margin,
+  // and still by far the sharpest steering.
+  folding: { name:'Folding Chair',   desc:'Slower, turns on a dime',  color:0x8a8f9c, maxSpeed:45, accel:25, steer:2.8, grip:0.92 },
   wheelchair: { name:'Wheelchair',   desc:'Quick off the line, super agile', color:0x2f7fbf, maxSpeed:43, accel:36, steer:2.4, grip:0.68 },
   boardroom:  { name:'Boardroom Chair', desc:'Slow to wind up, then unstoppable', color:0x7a4426, maxSpeed:48, accel:24, steer:2.2, grip:0.55 }
 };
@@ -1625,8 +1630,23 @@ function buildErgoChair(g, color) {
 function buildFoldingChair(g, color) {
   const m = metal(color), tube = metal(0x9aa0ad);
   const seat = new THREE.Mesh(BoxG(1.3, 0.12, 1.3), m); seat.position.y = 1.24; g.add(seat);
-  for (let k = -1; k <= 1; k++) { const slat = new THREE.Mesh(BoxG(1.3, 0.14, 0.1), m); slat.position.set(0, 1.86 + k*0.42, -0.58); slat.rotation.x = -0.14; g.add(slat); }
-  const back = new THREE.Mesh(BoxG(1.3, 0.1, 0.1), tube); back.position.set(0, 2.32, -0.7); g.add(back);
+  // Backrest as a proper frame. The slats used to float with nothing joining
+  // them to the seat, and they all sat at one depth while the back was raked,
+  // so nothing lined up. Now two uprights carry the load and every piece follows
+  // the same rake line: z drops by tan(RAKE) for each unit of height.
+  const RAKE = 0.14, zAt = y => -0.56 - Math.tan(RAKE) * (y - 1.24);
+  for (const sx of [-1, 1]) {
+    const up = new THREE.Mesh(BoxG(0.09, 1.20, 0.09), tube);
+    up.position.set(sx * 0.58, 1.82, zAt(1.82));
+    up.rotation.x = -RAKE; g.add(up);
+  }
+  for (const y of [1.52, 1.86, 2.20]) {
+    const slat = new THREE.Mesh(BoxG(1.22, 0.15, 0.09), m);
+    slat.position.set(0, y, zAt(y) - 0.03);
+    slat.rotation.x = -RAKE; g.add(slat);
+  }
+  const back = new THREE.Mesh(BoxG(1.3, 0.1, 0.1), tube);
+  back.position.set(0, 2.40, zAt(2.40)); back.rotation.x = -RAKE; g.add(back);
   const legGeo = CylG(0.06, 0.06, 1.55, 8);
   for (const [cx, cz] of [[1,1],[-1,1],[1,-1],[-1,-1]]) {
     const l = new THREE.Mesh(legGeo, tube);
@@ -1888,6 +1908,18 @@ function makeCone() {
 let mode = 'title'; // 'title' | 'menu' | 'race'
 let scene, camera, renderer, racers, obstacles, playerIdx = 0;
 let running = false, paused = false, resumeT = 0, countdownT = 0, finishOrder = [], raceOver = false;
+// Crossing the line used to cut your controls and leave you watching the chair
+// coast for 900ms. This is that dead moment turned into a beat: the world drops
+// into slow motion and the camera swings round from behind to alongside.
+const FINISH_FX = 4.0;      // real seconds the whole sequence runs for
+const FINISH_SLOW = 0.35;   // fraction of that spent in slow motion
+let finishFxT = 0;
+// The spectators line the whole circuit and cheer at a constant idle whatever
+// happens, including through the moment somebody wins the race they are meant to
+// be watching. This is that moment: for a few seconds the whole crowd comes off
+// the ground. Runs on world time, so it slows with the finish-line slow motion
+// instead of carrying on at normal speed underneath it.
+let crowdHypeT = 0, crowdHypeAmp = 1;
 let raceT = 0; // seconds since the lights go green; drives every lap/total time
 let selChair = 'gaming', selChar = 'manager', selMap = 'office';
 let particles = [], chevrons = [], elapsed = 0, frame = 0;
@@ -4412,6 +4444,8 @@ function startRace() {
   finishOrder = [];
   particles = [];
   raceOver = false;
+  finishFxT = 0;
+  crowdHypeT = 0;
   paused = false;
   resumeT = 0;
   finalLapShown = false;
@@ -4713,7 +4747,7 @@ function cashDrift(r, maxS) {
   // drift: boost otherwise refills on a flat timer no matter how you drive, so
   // it was just a clock. Now cornering well is how you earn it, and a good drift
   // is worth several seconds of waiting.
-  r.boost = Math.min(100, r.boost + m * 0.7);
+  r.boost = Math.min(100, r.boost + m * 0.49);
   r.speed = Math.min(r.speed + 6 + m * 0.09, maxS * 1.3);
   if (r.isPlayer) {
     flashAbility(null, tier.label, tier.css);
@@ -4985,7 +5019,17 @@ function updateRacer(r, dt, controlsOn) {
       if (lt > 1) { r.lapTimes.push(lt); if (!r.bestLap || lt < r.bestLap) r.bestLap = lt; }
       r.lapStart = raceT;
       r.lap++;
-      if (r.lap >= LAPS && !r.finished) { r.finished = true; r.totalTime = raceT; finishOrder.push(r); r.place = finishOrder.length; }
+      if (r.lap >= LAPS && !r.finished) {
+        r.finished = true; r.totalTime = raceT; finishOrder.push(r); r.place = finishOrder.length;
+        if (r.isPlayer) {
+          finishFxT = FINISH_FX; camKick = Math.max(camKick, 0.05); Sound.go();
+          // A win gets the full reaction; anything else gets a politer one, which
+          // is roughly what an office would manage for fourth place.
+          crowdHypeT = 3.2;
+          crowdHypeAmp = r.place === 1 ? 1 : 0.5;
+          Sound.cheer();
+        }
+      }
     }
     r.nextWp = (r.nextWp + 1) % WP_COUNT;
   }
@@ -5562,7 +5606,24 @@ function updateCamera(dt) {
 
   let target, lookTarget, targetFov, lerpPos, lerpLook;
 
-  if (povMode) {
+  if (finishFxT > 0) {
+    // Orbit round to the side as the sequence plays, so you watch yourself cross
+    // rather than staring at the back of your own chair. Overrides the seated
+    // view for the duration, then hands control back to whichever was chosen.
+    const prog = 1 - finishFxT / FINISH_FX;                // 0 -> 1
+    // Smoothstep so the camera eases away from behind and settles into position
+    // rather than sliding at a constant rate and stopping dead.
+    const e = prog * prog * (3 - 2 * prog);
+    const swing = e * 1.75;                                // ~100 degrees: past alongside
+    const a = p.dir + swing;
+    const back = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+    // drift outward and up a little as it comes round, so the shot opens up
+    target = p.pos.clone().addScaledVector(back, -(5.4 + e * 1.8))
+                          .add(new THREE.Vector3(0, 2.7 + e * 0.9, 0));
+    lookTarget = p.pos.clone().add(new THREE.Vector3(0, 1.85, 0));
+    targetFov = 62 + speedK * 8;
+    lerpPos = 4.5; lerpLook = 6;
+  } else if (povMode) {
     // Seated view, eye level, just far enough forward to clear the rider's own
     // head. Crucially this faces r.heading, where the chair points, NOT the
     // direction of travel: in a drift you end up staring off across the corner
@@ -5631,7 +5692,21 @@ function setPov(on) {
 const cdEl = document.getElementById('countdown');
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rdt = Math.min(clock.getDelta(), 0.05);   // real time, unscaled
+  // The finish sequence runs on real time so it always lasts the same wall-clock
+  // length, but everything it drives runs on the scaled clock. Slowest right at
+  // the line, easing back to normal speed rather than snapping out of it.
+  let tScale = 1;
+  if (finishFxT > 0) {
+    finishFxT = Math.max(0, finishFxT - rdt);
+    const prog = 1 - finishFxT / FINISH_FX;       // 0 at the line -> 1 at the end
+    // Slow motion is deliberately shorter than the sequence. The drama belongs at
+    // the line; dragging the whole four seconds at a third speed would make every
+    // single race end in treacle. Speed is back to normal well before the camera
+    // has finished coming round.
+    tScale = prog < FINISH_SLOW ? 0.30 + 0.70 * Math.pow(prog / FINISH_SLOW, 2.2) : 1;
+  }
+  const dt = rdt * tScale;
   elapsed += dt; frame++;
 
   if (mode === 'title' || mode === 'menu') {
@@ -5685,6 +5760,7 @@ function animate() {
       sh.m.rotation.x = -Math.PI / 2 + Math.sin(elapsed * 2.3 + sh.phase) * 0.22;
       sh.m.rotation.z = Math.sin(elapsed * 3 + sh.phase) * 0.3;
     }
+    if (crowdHypeT > 0) crowdHypeT = Math.max(0, crowdHypeT - dt);
     const camP = racers[playerIdx].pos;
     cullCrowdChunks();
     for (const s of crowd) {
@@ -5693,7 +5769,16 @@ function animate() {
       if (s.chunk && !s.chunk.visible) continue;  // and skip whatever is off-camera
       const p = s.parts;
       const bob0 = s.bob, lean0 = s.lean;
-      if (s.type === 'cheer') {
+      if (crowdHypeT > 0) {
+        // Everyone jumps, whatever they were doing. Ramps down over the last
+        // couple of seconds rather than stopping dead.
+        // Both terms scale to zero with k. Several behaviours (airplane, coffee,
+        // boo) never write bob or lean in their own branch, so anything left
+        // non-zero here would freeze them mid-jump for the rest of the race.
+        const k = Math.min(1, crowdHypeT / 2.0) * crowdHypeAmp;
+        s.bob = Math.abs(Math.sin(elapsed * (s.spd + 5.5) + s.phase)) * 0.88 * k;
+        s.lean = Math.sin(elapsed * 7.5 + s.phase * 1.7) * 0.18 * k;
+      } else if (s.type === 'cheer') {
         s.bob = Math.abs(Math.sin(elapsed * s.spd + s.phase)) * 0.28;
       } else if (s.type === 'sign') {
         s.bob = Math.abs(Math.sin(elapsed * 3 + s.phase)) * 0.1;
@@ -5744,7 +5829,9 @@ function animate() {
     if (racers[playerIdx].finished && !raceOver) {
       raceOver = true;
       order.forEach((r, i) => { if (!r.finished) r.place = i + 1; });
-      setTimeout(() => showResults(order), 900);
+      // Wait for the finish sequence to play out rather than dropping the panel
+      // over the top of it. FINISH_FX is real seconds, plus a beat to land on.
+      setTimeout(() => showResults(order), FINISH_FX * 1000 + 350);
     }
     updateCamera(dt);
    }
@@ -5931,7 +6018,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
