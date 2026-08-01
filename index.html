@@ -4390,7 +4390,7 @@ function makeRacer(chairKey, charCfg, isPlayer, gridSlot, charKey) {
     hr: 0, hrCd: 0,   // HR complaints, and a guard so one thump counts once
     pos, heading, dir: heading, slip: 0,   // dir is where it travels, heading where it points
     speed: 0, boost: 100, boostT: 0, dustT: 0, crashCd: 0,
-    driftMeter: 0, driftActive: false, driftBoostT: 0,
+    driftMeter: 0, driftActive: false, driftBoostT: 0, driftGrace: 0,
     nextWp: 1, lap: 0, progress: 0, finished: false, place: 0,
     ai: isPlayer ? null : {
       // Rivals run close to their chair's real pace. Deliberately set halfway
@@ -4700,7 +4700,7 @@ function distToTrack(p) {
 const DRIFT_TIERS = [
   { at: 70, dur: 1.15, label: 'Perfect Drift!', css: '#ffd84d' },
   { at: 40, dur: 0.75, label: 'Great Drift!',   css: '#5ccbd7' },
-  { at: 18, dur: 0.45, label: 'Drift!',         css: '#a8d8de' }
+  { at: 14, dur: 0.45, label: 'Drift!',         css: '#a8d8de' }
 ];
 function cashDrift(r, maxS) {
   const m = r.driftMeter;
@@ -4709,6 +4709,11 @@ function cashDrift(r, maxS) {
   const tier = DRIFT_TIERS.find(t => m >= t.at);
   if (!tier) return;
   r.driftBoostT = Math.max(r.driftBoostT || 0, tier.dur);
+  // Ending a slide also pours into the Space boost. This is the real reason to
+  // drift: boost otherwise refills on a flat timer no matter how you drive, so
+  // it was just a clock. Now cornering well is how you earn it, and a good drift
+  // is worth several seconds of waiting.
+  r.boost = Math.min(100, r.boost + m * 0.7);
   r.speed = Math.min(r.speed + 6 + m * 0.09, maxS * 1.3);
   if (r.isPlayer) {
     flashAbility(null, tier.label, tier.css);
@@ -4760,11 +4765,25 @@ function updateRacer(r, dt, controlsOn) {
       // Sliding sideways scrubs speed, so a drift you never cash in costs you.
       if (Math.abs(r.slip) > 0.05) r.speed -= Math.abs(r.slip) * 5.5 * dt * Math.sign(r.speed || 1);
       // The meter charges on how hard you are actually sideways, not on holding a key.
-      if (drifting && Math.abs(r.slip) > 0.12) {
-        r.driftMeter = Math.min(100, r.driftMeter + Math.abs(r.slip) * (Math.abs(r.speed) / S.maxSpeed) * 115 * dt);
+      // Charge on how close the slide is to THIS chair's own limit, not on the
+      // raw angle. Previously a Folding Chair could hold a perfect drift all the
+      // way through a corner and never reach even the lowest tier, because its
+      // limit is 15 degrees against the Gaming Chair's 46 - it paid the speed
+      // penalty every corner and collected nothing, ever. Grip now decides how
+      // sideways a drift looks and how hard it is to hold, not whether it pays.
+      if (drifting && Math.abs(r.slip) > slipMax * 0.3) {
+        r.driftMeter = Math.min(100, r.driftMeter + (Math.abs(r.slip) / slipMax) * (Math.abs(r.speed) / S.maxSpeed) * 55 * dt);
+        r.driftGrace = 0.35;
         if (!r.driftActive) { r.driftActive = true; Sound.beep(); }
       } else if (r.driftActive) {
-        cashDrift(r, maxS);
+        // Don't cash out the instant the angle dips. The slide passes through
+        // zero every time you swap direction, and a steering correction dropped
+        // it below the threshold for a frame or two - either used to wipe the
+        // whole meter. With a short grace window the charge survives a fumble,
+        // and flicking the other way through an S-bend now chains instead of
+        // starting over.
+        r.driftGrace -= dt;
+        if (r.driftGrace <= 0) cashDrift(r, maxS);
       }
     } else {
       r.speed -= Math.sign(r.speed) * S.accel * 0.6 * dt;
@@ -4818,11 +4837,13 @@ function updateRacer(r, dt, controlsOn) {
     const slipRate = drifting ? 5.0 : 4.5 + chairGrip * 5;
     r.slip += (slipTarget - r.slip) * Math.min(dt * slipRate, 1);
     if (Math.abs(r.slip) > 0.05) r.speed -= Math.abs(r.slip) * 4.5 * dt * Math.sign(r.speed || 1);
-    if (drifting && Math.abs(r.slip) > 0.12) {
-      r.driftMeter = Math.min(100, r.driftMeter + Math.abs(r.slip) * (Math.abs(r.speed) / S.maxSpeed) * 115 * dt);
+    if (drifting && Math.abs(r.slip) > slipMax * 0.3) {
+      r.driftMeter = Math.min(100, r.driftMeter + (Math.abs(r.slip) / slipMax) * (Math.abs(r.speed) / S.maxSpeed) * 55 * dt);
+      r.driftGrace = 0.35;
       r.driftActive = true;
     } else if (r.driftActive) {
-      cashDrift(r, maxS);
+      r.driftGrace -= dt;
+      if (r.driftGrace <= 0) cashDrift(r, maxS);
     }
     let tSpeed = maxS * ai.skill * (controlsOn && !r.finished ? 1 : 0);
     if (Math.abs(diff) > 0.45) tSpeed *= 0.62;
@@ -4836,6 +4857,13 @@ function updateRacer(r, dt, controlsOn) {
     else r.speed -= S.accel * 1.2 * dt;
     // Boost is spent where it pays rather than at random: on a straight, and much
     // more readily when there is someone close enough to take a place off.
+    //
+    // Tempting to make this cleverer - only fire with open road ahead, only near
+    // top speed - but measured across all five maps every such variant came out
+    // SLOWER. Boost refills on a timer, so a boost fired imperfectly still beats
+    // one held back; and because the AI's target speed scales with the boosted
+    // ceiling, giving it more boost mostly makes it run wider. Left deliberately
+    // loose. See the notes before changing it.
     if (controlsOn && !r.finished && r.boost >= 100 && Math.abs(diff) < 0.12) {
       let odds = 0.004;
       for (const o of racers) {
@@ -4852,8 +4880,16 @@ function updateRacer(r, dt, controlsOn) {
   if (r.boostT > 0) r.boostT -= dt;
   if (r.crashCd > 0) r.crashCd -= dt;
   if (r.hrCd > 0) r.hrCd -= dt;
-  r.boost = Math.min(100, r.boost + dt * 16);
-  r.speed = Math.max(-8, Math.min(maxS, r.speed));
+  // 12.5/s fills the bar in 8 seconds rather than 6.25. Slowing the free refill
+  // is what gives drifting its pull: a Great drift hands back 28 of those points,
+  // which is now worth 2.2 seconds of waiting instead of 1.8.
+  r.boost = Math.min(100, r.boost + dt * 12.5);
+  // Recomputed rather than reusing maxS from the top of the frame: cashDrift may
+  // have opened a boost window since then, and the old value would have clamped
+  // the payout straight back off again.
+  const ceilNow = S.maxSpeed * ((r.boostT > 0 || r.driftBoostT > 0) ? 1.45 : 1)
+                  * ((abil && abil.speed) || 1) * (r.slowT > 0 ? 0.86 : 1);
+  r.speed = Math.max(-8, Math.min(ceilNow, r.speed));
 
   // rooftop launch ramp
   if (!r.air && jumpPads.length) {
@@ -5895,7 +5931,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
