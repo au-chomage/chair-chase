@@ -610,24 +610,47 @@ const LOGO_URI="data:image/webp;base64,UklGRmwyAgBXRUJQVlA4WAoAAAAQAAAAHwMA1gEAQ
 const Sound = (() => {
   let ready = false, unlocked = false, starting = false, raceMode = false, step = 0;
   let master, chords, bass, hat, lead, blip, click, noise, thud, crowdGain;
-  // ii–V–I–VI in C, a jazzy corporate-muzak turnaround
+  let verb, verbSend, chorus, kick, brush;
+  // ii-V-I-VI in C, a jazzy corporate-muzak turnaround.
+  // walk[] is a proper walking bass line: root, chord tones, then a chromatic
+  // approach note that leans into the next bar's root. It closes the loop, so
+  // bar 3 ends on Eb2 leading back down to the D2 that starts bar 0.
   const prog = [
-    { bass: 'D2', chord: ['F3','A3','C4','E4'] },
-    { bass: 'G2', chord: ['F3','B3','D4','E4'] },
-    { bass: 'C2', chord: ['E3','G3','B3','D4'] },
-    { bass: 'A2', chord: ['E3','G3','Db4','G4'] }
+    { bass: 'D2', chord: ['F3','A3','C4','E4'],  walk: ['D2','F2','A2','Ab2'] },
+    { bass: 'G2', chord: ['F3','B3','D4','E4'],  walk: ['G2','B2','D3','Db3'] },
+    { bass: 'C2', chord: ['E3','G3','B3','D4'],  walk: ['C3','B2','G2','Bb2'] },
+    { bass: 'A2', chord: ['E3','G3','Db4','G4'], walk: ['A2','G2','E2','Eb2'] }
   ];
+  // Tiny velocity jitter so repeated bars are not bit-identical.
+  const hum = (v, amt) => v + (Math.random() - 0.5) * (amt || 0.1);
   function build() {
     master = new Tone.Gain(0.85).toDestination();
-    chords = new Tone.PolySynth(Tone.Synth).connect(master);
+
+    // A shared reverb send. Everything was previously wired dry straight to the
+    // master, which is the main reason the track sounded like a loop rather than
+    // a room. Freeverb is algorithmic rather than convolution, so it costs very
+    // little CPU - this game has to leave headroom for the renderer.
+    verb = new Tone.Freeverb({ roomSize: 0.82, dampening: 2600 });
+    verb.wet.value = 1;                 // send level is controlled by verbSend
+    verb.connect(master);
+    verbSend = new Tone.Gain(0.26).connect(verb);
+    // Chorus is what gives lounge electric piano its shimmer.
+    chorus = new Tone.Chorus({ frequency: 0.75, delayTime: 3.5, depth: 0.55, wet: 0.5 });
+    chorus.connect(master); chorus.connect(verbSend);
+    try { chorus.start(); } catch (e) {}
+
+    chords = new Tone.PolySynth(Tone.Synth).connect(chorus);
     chords.set({ oscillator: { type: 'triangle' }, envelope: { attack: 0.03, decay: 0.4, sustain: 0.15, release: 0.9 } });
     chords.volume.value = -18;
     bass = new Tone.MonoSynth({ oscillator: { type: 'sine' }, envelope: { attack: 0.02, decay: 0.2, sustain: 0.5, release: 0.3 }, filterEnvelope: { attack: 0.02, decay: 0.1, sustain: 0.4, baseFrequency: 120, octaves: 2.2 } }).connect(master);
-    bass.volume.value = -14;
+    bass.volume.value = -15;
+    bass.connect(verbSend);
     hat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 } }).connect(master);
-    hat.volume.value = -30;
+    hat.volume.value = -29;
+    hat.connect(verbSend);
     lead = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.02, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(master);
     lead.volume.value = -20;
+    lead.connect(verbSend);
     blip = new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 } }).connect(master);
     blip.volume.value = -13;
     click = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 } }).connect(master);
@@ -636,17 +659,49 @@ const Sound = (() => {
     noise.volume.value = -18;
     thud = new Tone.MembraneSynth({ octaves: 2.5, pitchDecay: 0.05, envelope: { attack: 0.001, decay: 0.3, sustain: 0 } }).connect(master);
     thud.volume.value = -9;
+    // Brushes on 2 and 4, and a kick played lightly under beat one. Separate
+    // instruments from thud/noise so collision SFX cannot cut the groove off.
+    brush = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.004, decay: 0.16, sustain: 0 } });
+    const bf = new Tone.Filter(3200, 'bandpass'); bf.Q.value = 0.7;
+    brush.connect(bf); bf.connect(master); bf.connect(verbSend);
+    brush.volume.value = -25;
+    kick = new Tone.MembraneSynth({ octaves: 3, pitchDecay: 0.04, envelope: { attack: 0.001, decay: 0.24, sustain: 0 } }).connect(master);
+    kick.volume.value = -20;
+
     const cn = new Tone.Noise('pink'), cf = new Tone.Filter(700, 'bandpass');
     cf.Q.value = 1.2;
     crowdGain = new Tone.Gain(0).connect(master);
     cn.connect(cf); cf.connect(crowdGain); cn.start();
     Tone.Transport.bpm.value = 104;
+    // Straight eighths are what made this sound programmed. Swing is the single
+    // biggest character change available, and it is one line.
+    Tone.Transport.swing = 0.32;
+    Tone.Transport.swingSubdivision = '8n';
+
+    // Eighth-note positions within a 4/4 bar: beat 1 = 0, beat 2 = 2, 3 = 4, 4 = 6.
+    // The classic jazz ride figure is 1, 2, 2-and, 3, 4, 4-and - it deliberately
+    // leaves 1-and and 3-and empty, which is what stops it sounding like a metronome.
+    const RIDE = [0, 2, 3, 4, 6, 7];
+
     Tone.Transport.scheduleRepeat((time) => {
       const s = step % 32, barI = ((s / 8) | 0) % 4, e = s % 8, p = prog[barI];
-      if (e === 0) { chords.triggerAttackRelease(p.chord, '2n', time, 0.32); bass.triggerAttackRelease(p.bass, '4n', time, 0.9); }
-      if (e === 4) bass.triggerAttackRelease(Tone.Frequency(p.bass).transpose(7), '4n', time, 0.8);
-      hat.triggerAttackRelease('16n', time, e % 2 ? 0.4 : 0.2);
-      if (raceMode && (e === 2 || e === 5 || e === 7)) lead.triggerAttackRelease(Tone.Frequency(p.chord[s % 4]).transpose(12), '16n', time, 0.6);
+
+      if (e === 0) chords.triggerAttackRelease(p.chord, '2n', time, hum(0.30, 0.06));
+
+      // Walking bass: all four beats once racing, beats 1 and 3 in the menu, so
+      // the arrangement visibly lifts when the lights go out.
+      if (e % 2 === 0) {
+        const beat = e / 2;
+        if (raceMode || beat === 0 || beat === 2) {
+          bass.triggerAttackRelease(p.walk[beat], raceMode ? '8n' : '4n', time, hum(0.85, 0.1));
+        }
+      }
+
+      if (RIDE.indexOf(e) >= 0) hat.triggerAttackRelease('16n', time, hum(e === 0 || e === 4 ? 0.34 : 0.22, 0.08));
+      if (e === 2 || e === 6) brush.triggerAttackRelease('8n', time, hum(0.5, 0.12));
+      if (raceMode && e === 0) kick.triggerAttackRelease('C1', '8n', time, 0.55);
+
+      if (raceMode && (e === 2 || e === 5 || e === 7)) lead.triggerAttackRelease(Tone.Frequency(p.chord[s % 4]).transpose(12), '16n', time, hum(0.55, 0.12));
       step++;
     }, '8n');
     ready = true;
@@ -2277,7 +2332,107 @@ const Post = (() => {
 })();
 
 // ---------- selection menu scene ----------
-let mScene, mCam, showcase = null, glowRing;
+let mScene, mCam, showcase = null, glowRing, eotmScreen = null, eotmTex = null;
+
+// ---------- Employee of the Month ----------
+// A flat, blocky portrait drawn from the character's own palette rather than a
+// 3D render: it matches the game's look, costs nothing, and needs no lighting.
+const hexOf = n => '#' + n.toString(16).padStart(6, '0');
+function drawEotm(entry) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 320;
+  const x = c.getContext('2d');
+
+  x.fillStyle = '#10323a'; x.fillRect(0, 0, 512, 320);
+  // faint scanlines, so it reads as a slightly tired office monitor
+  x.fillStyle = 'rgba(0,0,0,0.14)';
+  for (let i = 0; i < 320; i += 4) x.fillRect(0, i, 512, 2);
+
+  x.fillStyle = '#0c262c'; x.fillRect(0, 0, 512, 52);
+  x.fillStyle = '#7fd9e4'; x.textAlign = 'center';
+  x.font = 'bold 26px Verdana, sans-serif';
+  x.fillText('EMPLOYEE OF THE MONTH', 256, 35);
+
+  const key = (entry && entry.chr) || null;
+  const cfg = (key && CHARACTERS[key]) || null;
+
+  if (!cfg) {
+    // Nobody has raced yet, or we cannot reach the board. An empty plaque is a
+    // more honest answer than inventing a winner.
+    x.fillStyle = '#4d7f88';
+    x.font = 'bold 34px Verdana, sans-serif';
+    x.fillText('POSITION VACANT', 256, 168);
+    x.font = '18px Verdana, sans-serif';
+    x.fillText('be the first to race today', 256, 206);
+    return c;
+  }
+
+  const cx = 150, top = 78;
+  const skin = '#e8bd94';
+  // shoulders
+  x.fillStyle = hexOf(cfg.shirt);
+  x.fillRect(cx - 62, top + 108, 124, 62);
+  if (cfg.vest) { x.fillStyle = hexOf(cfg.vest); x.fillRect(cx - 62, top + 108, 34, 62); x.fillRect(cx + 28, top + 108, 34, 62); }
+  if (cfg.tie) { x.fillStyle = hexOf(cfg.tie); x.fillRect(cx - 8, top + 108, 16, 52); }
+  // neck and head
+  x.fillStyle = skin; x.fillRect(cx - 14, top + 92, 28, 20);
+  x.fillRect(cx - 42, top, 84, 100);
+  // hair
+  x.fillStyle = hexOf(cfg.hair || 0x3a2a1a);
+  x.fillRect(cx - 46, top - 10, 92, 30);
+  x.fillRect(cx - 46, top - 10, 14, 62);
+  x.fillRect(cx + 32, top - 10, 14, 62);
+  if (cfg.cap) { x.fillStyle = hexOf(cfg.cap); x.fillRect(cx - 48, top - 22, 96, 26); x.fillRect(cx - 60, top + 2, 120, 10); }
+  // eyes and a resigned mouth
+  x.fillStyle = '#1c1c22';
+  x.fillRect(cx - 26, top + 40, 12, 10); x.fillRect(cx + 14, top + 40, 12, 10);
+  x.fillRect(cx - 16, top + 74, 32, 5);
+  if (cfg.glasses) {
+    x.strokeStyle = '#1c1c22'; x.lineWidth = 4;
+    x.strokeRect(cx - 32, top + 34, 26, 22); x.strokeRect(cx + 6, top + 34, 26, 22);
+    x.beginPath(); x.moveTo(cx - 6, top + 45); x.lineTo(cx + 6, top + 45); x.stroke();
+  }
+  if (cfg.headphones) {
+    x.fillStyle = '#24262e';
+    x.fillRect(cx - 58, top + 22, 16, 44); x.fillRect(cx + 42, top + 22, 16, 44);
+    x.fillRect(cx - 50, top - 24, 100, 12);
+  }
+  if (cfg.airpods) { x.fillStyle = '#f2f2f2'; x.fillRect(cx - 48, top + 40, 10, 24); x.fillRect(cx + 38, top + 40, 10, 24); }
+
+  // name plate
+  x.textAlign = 'left';
+  x.fillStyle = '#ffffff';
+  x.font = 'bold 34px Verdana, sans-serif';
+  let nm = entry.name || 'Anonymous';
+  if (x.measureText(nm).width > 240) {
+    while (x.measureText(nm + '\u2026').width > 240 && nm.length > 2) nm = nm.slice(0, -1);
+    nm += '\u2026';                       // reads as truncated, not misspelled
+  }
+  x.fillText(nm, 250, 140);
+  x.fillStyle = '#7fd9e4';
+  x.font = '19px Verdana, sans-serif';
+  x.fillText(cfg.name, 250, 172);
+  x.fillStyle = '#cfe9ec';
+  x.font = 'bold 22px Verdana, sans-serif';
+  const r = entry.races || 0;
+  x.fillText(r + (r === 1 ? ' race' : ' races'), 250, 214);
+  x.fillStyle = '#5f9aa4';
+  x.font = '15px Verdana, sans-serif';
+  x.fillText(entry.day || '', 250, 244);
+  return c;
+}
+
+let eotmLoaded = false;
+function refreshEotm() {
+  if (eotmLoaded || !eotmTex) return;
+  eotmLoaded = true;                       // one attempt per session is plenty
+  Leaderboard.employeeOfMonth().then(entry => {
+    if (!eotmTex) return;
+    eotmTex.image = drawEotm(entry);
+    eotmTex.needsUpdate = true;
+  }).catch(() => {});
+}
+
 function buildMenuScene() {
   mScene = new THREE.Scene();
   mScene.background = new THREE.Color(0xd8d2c4);
@@ -2348,6 +2503,13 @@ function buildMenuScene() {
   deskSide.position.set(-4.3, 1.55, 0.2); deskSide.castShadow = true; mScene.add(deskSide);
   const mon = new THREE.Mesh(BoxG(1.5, 1.0, 0.14), lam(0x1c1e26));
   mon.position.set(-2.9, 2.35, -2.7); mon.castShadow = true; mScene.add(mon);
+  // The screen face. Self-lit so it reads as a monitor rather than a painted
+  // panel; the texture is redrawn whenever the Employee of the Month changes.
+  eotmTex = new THREE.CanvasTexture(drawEotm(null));
+  eotmTex.anisotropy = 4;
+  eotmScreen = new THREE.Mesh(PlaneG(1.33, 0.84), new THREE.MeshBasicMaterial({ map: eotmTex }));
+  eotmScreen.position.set(-2.9, 2.35, -2.62);
+  mScene.add(eotmScreen);
   const monFoot = new THREE.Mesh(BoxG(0.4, 0.3, 0.3), lam(0x2b2e36));
   monFoot.position.set(-2.9, 1.75, -2.7); mScene.add(monFoot);
   const kb = new THREE.Mesh(BoxG(1.2, 0.07, 0.45), lam(0xd8d6d0));
@@ -2498,6 +2660,7 @@ function refreshMenu() {
 }
 function openMenu(step) {
   mode = 'menu';
+  refreshEotm();                 // fills the desk monitor; no-ops after the first call
   Sound.setMode('menu'); Sound.duck(false);
   document.getElementById('muteBtn').style.display = 'block';
   stepIdx = step;
@@ -5667,7 +5830,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
@@ -5699,6 +5862,7 @@ function bankRun(useBeacon) {
     name: ensureName(),
     map: selMap,
     chair: p.chairKey,
+    chr: p.charKey,                         // drives the Employee of the Month portrait
     bestLap: +(p.bestLap || 0).toFixed(3),  // 0 means they never completed a lap
     total: +raceT.toFixed(3),
     dist: +p.dist.toFixed(1),
@@ -5753,6 +5917,16 @@ const Leaderboard = (() => {
       return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload })
         .then(r => ({ ok: r.ok, online: true }))
         .catch(() => ({ ok: false, online: false }));
+    },
+    // Employee of the Month. Returns null when there is no backend or nobody has
+    // raced yet, and the screen shows a vacant plaque rather than a fake winner.
+    async employeeOfMonth() {
+      if (!LEADERBOARD_URL) return null;
+      try {
+        const r = await fetch(base() + '/eotm');
+        if (!r.ok) return null;
+        return await r.json();
+      } catch (e) { return null; }
     },
     async top(mapKey, by) {
       if (LEADERBOARD_URL) {
