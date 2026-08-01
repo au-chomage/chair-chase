@@ -906,7 +906,24 @@ const MAPS = {
   startup: { name:'The Startup', desc:'Move fast. Drift faster. Ship never.', theme:'startup',
             floor:0x9a9a9e, wall:0x8a4b3a, road:0x6f737b,
             ceil:'#d0d1d4', lightTile:'#eaf1ff', sky:0xd2cfca, fog:0xd2cfca,
-            path:[[185.8,47.8],[185.1,66.5],[181,84.8],[173.5,101.9],[163,117.3],[149.8,130.4],[134.3,140.8],[108,154.8],[90.1,163.4],[71.9,171.3],[53.4,178.3],[34.6,184.5],[15.5,189.9],[-14.4,197.2],[-32.9,199.7],[-51.6,198.7],[-69.8,194.1],[-86.8,186.1],[-102.1,175],[-115,161.3],[-138.1,131.2],[-149.2,115.4],[-159.8,99.1],[-169.6,82.4],[-178.8,65.3],[-187.2,47.9],[-198.1,22.3],[-200,2.4],[-195.4,-16.9],[-184.7,-33.6],[-169.1,-45.8],[-122.3,-71.6],[-106.9,-84],[-94.1,-99.1],[-84.1,-116.4],[-70.6,-153.4],[-61.5,-170.9],[-48,-185.2],[-31.1,-195],[-12.2,-199.7],[47.7,-197.9],[66.7,-195.4],[85,-189.6],[102.1,-180.7],[117.4,-169],[130.4,-154.7],[140.9,-138.4],[154.6,-112],[162.1,-95.1],[168.6,-77.6],[173.8,-59.8],[177.9,-41.6],[180.9,-23.3],[182.6,-4.7]] },
+            path:[
+      [68.8,-84.8], [36.8,-84], [4.8,-83.6], [-27.2,-82.4],
+      [-56,-78.4], [-81.2,-71.2], [-103.2,-60], [-121.6,-45.6],
+      [-134.4,-29.6], [-140,-13.6], [-140,3.2], [-136.8,19.2],
+      [-131.2,35.2], [-124,48.8], [-113.6,61.6], [-100,68.8],
+      [-84.8,69.6], [-70.4,66.4], [-54.4,71.2], [-39.2,81.6],
+      [-24,91.2], [-8,97.6], [8,97.6], [20,90.4],
+      [23.2,77.6], [24,63.2], [19.2,49.6], [8.8,35.2],
+      [-9.6,22.4], [-28.8,12], [-46.4,4.8], [-64,3.2],
+      [-81.6,6.4], [-96,-4], [-98.4,-21.6], [-87.2,-35.2],
+      [-68,-40.8], [-46.4,-41.6], [-26.4,-37.6], [-6.4,-29.6],
+      [12.8,-22.4], [29.6,-13.6], [48,-2.4], [54.4,12],
+      [54.4,27.2], [58.4,42.4], [68.8,53.6], [83.2,56],
+      [95.2,48.8], [102.4,34.4], [104.8,19.2], [100.8,3.2],
+      [107.2,-12], [116,-27.2], [124.8,-42.4], [133.6,-56],
+      [145.6,-69.6], [152,-86.4], [146.4,-100], [129.6,-107.2],
+      [105.6,-104.8], [82.4,-96.8]
+    ] },
   carpark: { name:'Level -2', desc:'Permit required. Nobody has one.', theme:'carpark',
             floor:0x6e6c68, wall:0x7d7b76, road:0x5a5854,
             ceil:'#4a4845', lightTile:'#ffd9a0', sky:0x2a2c30, fog:0x2a2c30,
@@ -3263,7 +3280,11 @@ function decorate(mapKey, batcher, CHUNK) {
   let lampBudget = 2;
   // Deliberately the lightest scatter of any map: the campus is composed by hand,
   // so loose props would only make it look cluttered.
-  const count = mapKey === 'office' ? 76 : mapKey === 'startup' ? 68 : mapKey === 'carpark' ? 34 : mapKey === 'hq' ? 26 : 58;
+  // The Startup's circuit folds back on itself, so roughly 2.4x as much of the
+  // track sits inside its fog as on the old open loop. Per-waypoint density is
+  // pulled back to compensate: the frame looks about as full as before, because
+  // you are now seeing neighbouring sections too, but far less is drawn.
+  const count = mapKey === 'office' ? 76 : mapKey === 'startup' ? 44 : mapKey === 'carpark' ? 34 : mapKey === 'hq' ? 26 : 58;
   for (let k = 0; k < count; k++) {
     const i = Math.floor(Math.random() * WP_COUNT);
     const side = Math.random() < 0.5 ? 1 : -1;
@@ -3895,6 +3916,19 @@ function buildScene(mapKey) {
   // map renders less of the world than any other.
   scene.fog = new THREE.Fog(L.fogCol !== undefined ? L.fogCol : M.fog, L.fog[0], L.fog[1]);
 
+  // The far plane was a flat 500 on every map while linear fog goes fully opaque
+  // at L.fog[1]. Everything between the two was being drawn and then painted over
+  // with solid fog colour - real draw calls and real geometry for pixels nobody
+  // can see. Pulling the plane in to just past the fog culls that for free, with
+  // no visual change at all. It matters most on the compact maps: Level -2 fogs
+  // out at 98 and The Startup at 150, so both were rendering several times the
+  // world they actually show.
+  // The sky dome rides with the camera at a constant radius of 400, so any map
+  // that has one has to keep the plane outside it.
+  // Capped at the old 500 so the open campus, which fogs out at 470, is untouched.
+  camera.far = Math.min(500, Math.max(L.fog[1] * 1.15 + 20, skyDome ? 440 : 0));
+  camera.updateProjectionMatrix();
+
   // Warm key against cool fill. Previously the sky, the ground bounce, the ambient and
   // the sun were all warm, so the only thing separating a lit face from a shaded one was
   // brightness -- which is what made the office read flat. Cooling everything that is not
@@ -4094,8 +4128,9 @@ function buildScene(mapKey) {
   }
 
   // dense cubicle rows: workers seated at desks lining both sides of the track
-  const cubStep = Math.max(4, Math.round(WP_COUNT / ((mapKey === 'warehouse' ? 82 : 90) * (MOBILE_GPU ? 0.5 : 1))));
-  const fillChance = mapKey === 'office' ? 0.88 : mapKey === 'startup' ? 0.8 : (mapKey === 'carpark' || mapKey === 'hq') ? 0 : 0.68;
+  const cubDensity = mapKey === 'warehouse' ? 82 : mapKey === 'startup' ? 58 : 90;
+  const cubStep = Math.max(4, Math.round(WP_COUNT / (cubDensity * (MOBILE_GPU ? 0.5 : 1))));
+  const fillChance = mapKey === 'office' ? 0.88 : mapKey === 'startup' ? 0.58 : (mapKey === 'carpark' || mapKey === 'hq') ? 0 : 0.68;
   for (let i = 3; i < WP_COUNT; i += cubStep) {
     if (turnAt(i, 3) > 0.3) continue; // skip the tightest corners
     const n = wpNormal(i), ang = Math.atan2(n.x, n.z);
@@ -4127,7 +4162,8 @@ function buildScene(mapKey) {
   crowdChunks = [];
   const crowdChunkMap = new Map();
   const BEHAVIORS = ['cheer', 'cheer', 'cheer', 'airplane', 'selfie', 'coffee', 'sign', 'boo'];
-  const crowdStep = (mapKey === 'carpark' || mapKey === 'hq') ? (MOBILE_GPU ? 52 : 26) : Math.max(3, Math.round(WP_COUNT / (MOBILE_GPU ? 55 : 115)));
+  const crowdDensity = mapKey === 'startup' ? 74 : 115;
+  const crowdStep = (mapKey === 'carpark' || mapKey === 'hq') ? (MOBILE_GPU ? 52 : 26) : Math.max(3, Math.round(WP_COUNT / (MOBILE_GPU ? 55 : crowdDensity)));
   const ANIM_PART_KEYS = ['plane', 'cup', 'splash', 'flash', 'sign'];
   for (let i = 2; i < WP_COUNT; i += crowdStep) {
     for (const side of [-1, 1]) {
@@ -4887,7 +4923,27 @@ function updateRacer(r, dt, controlsOn) {
   const wp = waypoints[r.nextWp];
   const dwx = r.pos.x - wp.x, dwz = r.pos.z - wp.z;
   const distNext = Math.sqrt(dwx*dwx + dwz*dwz);
-  if (distNext < 9) {
+
+  // Progress used to require passing within 9 units of all 420 waypoints in
+  // strict order. Get shoved wide - which happens a lot on Level -2, the one map
+  // with no walls, only pillars and parked cars - and the chain stalls behind
+  // you. Rejoin further along and the lap silently never completes.
+  //
+  // So look a short way up the chain and resync to the first waypoint actually
+  // within range. The window is deliberately small: because the track never
+  // comes within 24 units of itself even 10 waypoints apart, hopping the full
+  // window saves at most ~1% of a lap, and only by driving straight through the
+  // scenery. Anything resembling a real shortcut skips far more than RESYNC and
+  // still leaves you stranded, exactly as before.
+  const RESYNC = 20;
+  let hop = -1;
+  for (let k = 0; k <= RESYNC; k++) {
+    const idx = (r.nextWp + k) % WP_COUNT;
+    const w2 = waypoints[idx];
+    const ax = r.pos.x - w2.x, az = r.pos.z - w2.z;
+    if (ax * ax + az * az < 81) { hop = k; break; }   // 9 units, unchanged
+  }
+  for (let k = 0; k <= hop; k++) {
     if (r.nextWp === 0) {
       const lt = raceT - r.lapStart;
       if (lt > 1) { r.lapTimes.push(lt); if (!r.bestLap || lt < r.bestLap) r.bestLap = lt; }
@@ -5839,7 +5895,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
