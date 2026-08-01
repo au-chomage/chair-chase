@@ -2422,15 +2422,20 @@ function drawEotm(entry) {
   return c;
 }
 
-let eotmLoaded = false;
+let eotmAt = 0, eotmBusy = false;
 function refreshEotm() {
-  if (eotmLoaded || !eotmTex) return;
-  eotmLoaded = true;                       // one attempt per session is plenty
+  // Re-check periodically rather than once per session: finishing a race can
+  // change who holds the title, and the player should see that when they come
+  // back to the menu. The interval stops menu-flipping from spamming the Worker,
+  // and a failed fetch is allowed to retry rather than sticking on vacant.
+  if (!eotmTex || eotmBusy || typeof Leaderboard === 'undefined') return;
+  const now = Date.now();
+  if (eotmAt && now - eotmAt < 30000) return;
+  eotmBusy = true;
   Leaderboard.employeeOfMonth().then(entry => {
-    if (!eotmTex) return;
-    eotmTex.image = drawEotm(entry);
-    eotmTex.needsUpdate = true;
-  }).catch(() => {});
+    eotmAt = Date.now();
+    if (eotmTex) { eotmTex.image = drawEotm(entry); eotmTex.needsUpdate = true; }
+  }).catch(() => {}).then(() => { eotmBusy = false; });
 }
 
 function buildMenuScene() {
@@ -5811,6 +5816,10 @@ document.getElementById('menuBtn').onclick = () => { Sound.click(); bankRun(); r
 // ---------- title / results ----------
 function showTitle() {
   mode = 'title'; running = false; paused = false; resumeT = 0;
+  // The title screen renders the same 3D scene as the selection menu, so the
+  // desk monitor is on camera here too. Fetching only in openMenu() left it
+  // blank until you had been into the menu once.
+  refreshEotm();
   Sound.setMode('menu'); Sound.duck(false);
   document.getElementById('results').classList.add('hidden');
   document.getElementById('pause').classList.add('hidden');
@@ -5830,7 +5839,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
