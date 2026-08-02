@@ -183,6 +183,12 @@
   #boostbar { height:9px; background:rgba(16,24,28,.6); border:2px solid rgba(53,182,196,.7); border-radius:6px; overflow:hidden; }
   #boostfill { height:100%; width:100%; background:linear-gradient(90deg,#1b7f8c,#5ce8f2); transition:width .1s linear; }
   #countdown { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; font-size:120px; font-style:italic; color:#5ce8f2; text-shadow:6px 6px 0 rgba(0,0,0,.45); z-index:8; pointer-events:none; }
+  /* The display face has no real italic, so the browser synthesises one by
+     skewing it. A skewed glyph leans past its own advance width, and the shadow
+     reaches 6px further right again - both were getting shaved off the right
+     edge once the scale animation put the element on its own layer. The padding
+     gives them room inside the box being animated. */
+  #countdown span { display:inline-block; padding:0 .18em .04em 0; will-change:transform; }
   #results .standings { list-style:none; font-size:20px; margin-top:10px; }
   #results .standings li { padding:8px 22px; margin:6px 0; background:#182226; border-radius:8px; border:2px solid #29424a; min-width:min(300px,70vw); max-width:min(600px,92vw); }
   #results .standings li.you { border-color:#35b6c4; }
@@ -249,6 +255,16 @@
     font-size:clamp(10px,1.2vw,12px); letter-spacing:1.4px; text-transform:lowercase;
     color:#6f939a; text-decoration:none; padding:7px 3px; transition:color .18s; }
   #studio:hover { color:#5ce8f2; }
+
+  /* Shown for the two frames between pressing Race and the scene existing.
+     Its only job is to give the browser something to paint immediately, so the
+     click is acknowledged instead of the tab freezing through the build. */
+  #loadVeil { position:fixed; inset:0; z-index:14; display:none; align-items:flex-end; justify-content:center;
+    padding-bottom:11vh; background:rgba(12,18,22,.45); color:#9fe4ec;
+    font-family:'Arial Rounded MT Bold','Trebuchet MS',Verdana,sans-serif;
+    font-size:13px; letter-spacing:3px; text-transform:uppercase;
+    text-shadow:1px 1px 3px rgba(0,0,0,.6); }
+  #loadVeil.show { display:flex; }
 
   /* ---- mobile ---- */
   /* Screens can overflow a short landscape phone, so they scroll rather than clip. */
@@ -414,7 +430,7 @@
   @keyframes screenIn { from { opacity:0; } to { opacity:1; } }
   .titleLogo { animation:logoFloat 4.5s ease-in-out infinite; }
   @keyframes logoFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
-  #countdown.pop { animation:cdPop .45s cubic-bezier(.2,.9,.3,1.4); }
+  #countdown.pop span { animation:cdPop .45s cubic-bezier(.2,.9,.3,1.4); }
   @keyframes cdPop { 0% { transform:scale(1.7); opacity:.2; } 100% { transform:scale(1); opacity:1; } }
   .mArrow { transition:transform .12s, background .15s; }
   .mArrow:hover { transform:translateY(-50%) scale(1.12); background:rgba(27,127,140,.8); }
@@ -501,7 +517,7 @@
 </div>
 <div id="finalLap">Final Lap!</div>
 <div id="abilityFlash"></div>
-<div id="countdown" class="hidden"></div>
+<div id="countdown" class="hidden"><span></span></div>
 <div id="controlsHint">
   <div class="k"><div class="keys"><div class="key">◀</div><div class="key">▶</div></div>Steer</div>
   <div class="k"><div class="keys"><div class="key">▲</div></div>Go</div>
@@ -533,6 +549,8 @@
     <button id="tBoost" aria-label="Boost">⚡<b>BOOST</b></button>
   </div>
 </div>
+
+<div id="loadVeil"><span>Setting up the office…</span></div>
 
 <div id="rotate">
   <svg viewBox="0 0 24 24" width="66" height="66" fill="none" stroke="#35b6c4" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true">
@@ -1914,6 +1932,7 @@ let running = false, paused = false, resumeT = 0, countdownT = 0, finishOrder = 
 const FINISH_FX = 4.0;      // real seconds the whole sequence runs for
 const FINISH_SLOW = 0.35;   // fraction of that spent in slow motion
 let finishFxT = 0;
+let startPending = false;   // guards the deferred scene build
 // The spectators line the whole circuit and cheer at a constant idle whatever
 // happens, including through the moment somebody wins the race they are meant to
 // be watching. This is that moment: for a few seconds the whole crowd comes off
@@ -1924,7 +1943,7 @@ let raceT = 0; // seconds since the lights go green; drives every lap/total time
 let selChair = 'gaming', selChar = 'manager', selMap = 'office';
 let particles = [], chevrons = [], elapsed = 0, frame = 0;
 let crowd = [], crossers = [], papers = [], startSheets = [];
-let finalLapShown = false, hintShown = false, lastCountShown = -1;
+let finalLapShown = false, hintShown = false, lastCountShown = -1, lastResumeShown = -1;
 let hudPrevReady = false, hudLastLap = -1, hudLastRank = 0;
 const input = { up:false, down:false, left:false, right:false, boost:false, ability:false, drift:false,
                 axisX:0, axisY:0 };
@@ -2741,8 +2760,7 @@ document.getElementById('backBtn').onclick = () => {
 document.getElementById('nextBtn').onclick = () => {
   Sound.select();
   if (stepIdx === menuSteps.length - 1) {
-    menuUI.classList.add('hidden');
-    startRace();
+    startRace();          // hides the menu itself, once the scene actually exists
   } else openMenu(stepIdx + 1);
 };
 
@@ -4439,6 +4457,30 @@ function makeRacer(chairKey, charCfg, isPlayer, gridSlot, charKey) {
 }
 
 function startRace() {
+  // Building the scene is hundreds of meshes and nine generated textures. Doing
+  // it inside the click handler meant the browser could not paint until it
+  // finished, which is exactly what Interaction to Next Paint measures. Show the
+  // veil, let one frame land, then build. Two frames of rAF because the first
+  // callback still runs before that frame is painted.
+  if (startPending) return;          // a double tap must not queue two builds
+  startPending = true;
+  running = false;                   // freeze the old race during the gap, or
+                                     // restarting would let it run on two frames
+  const veil = document.getElementById('loadVeil');
+  if (veil) veil.classList.add('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    // Leaving for the title during the gap clears the flag, and the build is
+    // abandoned rather than dropping you into a race you already backed out of.
+    if (!startPending) { if (veil) veil.classList.remove('show'); return; }
+    try { buildRaceNow(); } finally {
+      startPending = false;
+      if (veil) veil.classList.remove('show');
+    }
+  }));
+}
+
+function buildRaceNow() {
+  menuUI.classList.add('hidden');
   buildScene(selMap);
   racers = [];
   finishOrder = [];
@@ -4456,6 +4498,7 @@ function startRace() {
   raceBanked = false;
   mode = 'race';
   lastCountShown = -1;
+  lastResumeShown = -1;
   hudPrevReady = false; hudLastLap = -1; hudLastRank = 0;
   document.getElementById('speedFx').classList.remove('on');
   document.getElementById('abilityFlash').classList.remove('show');
@@ -5690,6 +5733,15 @@ function setPov(on) {
 
 // ---------- main loop ----------
 const cdEl = document.getElementById('countdown');
+const cdTxt = cdEl.querySelector('span');
+// One place that shows a countdown glyph, so the resume countdown behaves
+// exactly like the starting one instead of quietly skipping the animation.
+function showCount(txt, pop) {
+  cdEl.classList.remove('hidden');
+  if (cdTxt.textContent !== String(txt)) cdTxt.textContent = txt;
+  if (pop) { cdEl.classList.remove('pop'); void cdEl.offsetWidth; cdEl.classList.add('pop'); }
+}
+function hideCount() { cdEl.classList.add('hidden'); cdEl.classList.remove('pop'); }
 function animate() {
   requestAnimationFrame(animate);
   const rdt = Math.min(clock.getDelta(), 0.05);   // real time, unscaled
@@ -5724,24 +5776,24 @@ function animate() {
   if (running && !paused) {
    if (resumeT > 0) {
     resumeT -= dt;
-    cdEl.classList.remove('hidden');
-    cdEl.textContent = resumeT > 0.5 ? Math.ceil(resumeT - 0.5) : 'GO!';
-    if (resumeT <= 0) cdEl.classList.add('hidden');
+    const rShown = resumeT > 0.5 ? Math.ceil(resumeT - 0.5) : 0;
+    showCount(rShown > 0 ? rShown : 'GO!', rShown !== lastResumeShown);
+    lastResumeShown = rShown;
+    if (resumeT <= 0) hideCount();
    } else {
     let controlsOn = true;
     if (countdownT > 0) {
       countdownT -= dt;
       controlsOn = countdownT <= 0.6;
-      cdEl.classList.remove('hidden');
-      cdEl.textContent = countdownT > 0.6 ? Math.ceil(countdownT - 0.6) : 'GO!';
       const shown = countdownT > 0.6 ? Math.ceil(countdownT - 0.6) : 0;
-      if (shown !== lastCountShown) { lastCountShown = shown; if (shown > 0) Sound.beep(); else Sound.go(); cdEl.classList.remove('pop'); void cdEl.offsetWidth; cdEl.classList.add('pop'); }
+      showCount(shown > 0 ? shown : 'GO!', shown !== lastCountShown);
+      if (shown !== lastCountShown) { lastCountShown = shown; if (shown > 0) Sound.beep(); else Sound.go(); }
       if (countdownT <= 0.6 && !hintShown) { hintShown = true; document.getElementById('controlsHint').classList.remove('show'); }
-      if (countdownT <= 0) cdEl.classList.add('hidden');
+      if (countdownT <= 0) hideCount();
     } else if (countdownT > -1) {
       countdownT -= dt;
-      if (countdownT <= -1) cdEl.classList.add('hidden');
-      else { cdEl.classList.remove('hidden'); cdEl.textContent = 'GO!'; }
+      if (countdownT <= -1) hideCount();
+      else showCount('GO!', false);
     }
     const active = countdownT <= 0.6;
     if (controlsOn && !racers[playerIdx].finished) raceT += dt;
@@ -5985,6 +6037,7 @@ function resumeGame() {
   clearInput();
   Sound.duck(false);
   resumeT = 3.3;
+  lastResumeShown = -1;   // so the first tick pops rather than being skipped
   document.getElementById('pause').classList.add('hidden');
 }
 document.getElementById('pauseBtn').onclick = () => { Sound.click(); pauseGame(); };
@@ -6006,6 +6059,9 @@ function showTitle() {
   document.getElementById('rotate').classList.remove('show');
   document.getElementById('controlsHint').classList.remove('show');
   document.getElementById('finalLap').classList.remove('show');
+  document.getElementById('countdown').classList.add('hidden');
+  document.getElementById('loadVeil').classList.remove('show');
+  startPending = false;   // cancels a build queued a frame or two ago
   menuUI.classList.add('hidden');
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('start').classList.remove('hidden');
@@ -6018,7 +6074,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
