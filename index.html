@@ -13,7 +13,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
-<title>Chair Chase — Race. Drift. Work(?)</title>
+<title>Chair Chase - Race. Drift. Work(?)</title>
 <meta name="description" content="Race office chairs against your colleagues across five workplaces. Fast chairs, slow promotions, and a global leaderboard.">
 
 <!-- Link previews. og:image MUST be an absolute URL: WhatsApp, Facebook and the
@@ -22,8 +22,8 @@
      since these services cache it hard. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Chair Chase">
-<meta property="og:" content="https://chairchase.com/">
-<meta property="og:title" content="Chair Chase — Race. Drift. Work(?)">
+<meta property="og:url" content="https://chairchase.com/">
+<meta property="og:title" content="Chair Chase - Race. Drift. Work(?)">
 <meta property="og:description" content="Race office chairs against your colleagues across five workplaces. Fast chairs, slow promotions, and a global leaderboard.">
 <meta property="og:image" content="https://chairchase.com/social-preview.jpg?v=1">
 <meta property="og:image:type" content="image/jpeg">
@@ -32,7 +32,7 @@
 <meta property="og:image:alt" content="Chair Chase logo with an office chair">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Chair Chase — Race. Drift. Work(?)">
+<meta name="twitter:title" content="Chair Chase - Race. Drift. Work(?)">
 <meta name="twitter:description" content="Race office chairs against your colleagues across five workplaces. Fast chairs, slow promotions, and a global leaderboard.">
 <meta name="twitter:image" content="https://chairchase.com/social-preview.jpg?v=1">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -363,6 +363,40 @@
   .boardList .tm { font-variant-numeric:tabular-nums; color:#cfeef2; }
   .boardEmpty { color:#8fb3ba; padding:22px 0; }
   .boardNote { color:#7fa3ab; font-size:12px; margin:14px 0 4px; min-height:16px; }
+
+  /* ---- about panel ---- */
+  /* Scrolls internally rather than growing the screen, so the Back button stays
+     put on a short laptop window the same way it does on the leaderboard. */
+  .aboutScroll { width:min(660px,92vw); max-height:min(56vh,520px); overflow-y:auto;
+    -webkit-overflow-scrolling:touch; text-align:left; padding:0 4px; }
+  .aboutSec { margin-bottom:22px; }
+  .aboutSec h3 { font-size:13px; letter-spacing:2.4px; text-transform:uppercase; color:#5ccbd7;
+    margin-bottom:8px; }
+  .aboutSec p { font-family:Verdana,sans-serif; font-weight:normal; font-size:13.5px;
+    line-height:1.62; color:#cfe0e4; margin-bottom:9px; }
+  .aboutSec p b { color:#eef6f7; }
+  .aboutFine { font-size:12px !important; color:#8fadb4 !important; }
+  .keyList { list-style:none; margin:0 0 10px; padding:0;
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:5px 18px; }
+  .keyList li { display:flex; align-items:baseline; gap:11px; }
+  .keyList b { flex:none; min-width:52px; text-align:center; font-size:11.5px; letter-spacing:1px;
+    color:#eef6f7; background:rgba(53,182,196,.16); border:1px solid rgba(53,182,196,.4);
+    border-radius:4px; padding:3px 6px; }
+  .keyList span { font-family:Verdana,sans-serif; font-weight:normal; font-size:13px; color:#cfe0e4; }
+  .aboutSec.support { border-top:1px solid rgba(120,150,158,.28); padding-top:18px; margin-bottom:6px; }
+  .coffeeBtn { display:inline-flex; align-items:center; justify-content:center; gap:11px;
+    margin-top:6px; font:inherit; font-size:17px; font-style:italic; letter-spacing:2px;
+    text-transform:uppercase; color:#1b2327; background:#ffd34d; border:none; cursor:pointer;
+    padding:13px 34px; text-decoration:none; transform:skewX(-8deg);
+    box-shadow:0 5px 0 rgba(0,0,0,.28);
+    transition:transform .1s, background .15s, box-shadow .12s; }
+  .coffeeBtn:hover { background:#ffe07a; transform:skewX(-8deg) translateY(-2px); box-shadow:0 7px 0 rgba(0,0,0,.28); }
+  .coffeeBtn:active { transform:skewX(-8deg) translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.28); }
+  @media (max-width:760px) {
+    .aboutScroll { max-height:none; overflow:visible; }
+    .keyList { grid-template-columns:1fr; }
+    .aboutSec p { font-size:13px; }
+  }
   .lapTime { font-size:15px; letter-spacing:1px; color:#cfeef2; font-variant-numeric:tabular-nums; margin-top:2px; }
   .resultTimes { color:#bfe4ea; font-size:14px; letter-spacing:.5px; margin:9px 0 24px; font-variant-numeric:tabular-nums; }
   .resultTimes b { color:#ffd34d; }
@@ -490,7 +524,7 @@
       <div id="abilitywrap">
         <div id="abilityrow">
           <span class="alab">X Ability</span>
-          <span id="abilityname">&mdash;</span>
+          <span id="abilityname"></span>
         </div>
         <div id="abilitybar"><div id="abilityfill"></div></div>
       </div>
@@ -591,10 +625,70 @@
     <div class="titleBtns">
       <button class="go" id="startBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Start</button>
       <button class="go alt" id="boardBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><rect x="3" y="12" width="5" height="9" fill="currentColor"/><rect x="9.5" y="6" width="5" height="15" fill="currentColor"/><rect x="16" y="9" width="5" height="12" fill="currentColor"/></svg></span>Leaderboard</button>
+      <button class="go alt" id="aboutBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="10.7" y="10" width="2.6" height="8" fill="currentColor"/><rect x="10.7" y="5.6" width="2.6" height="2.8" fill="currentColor"/></svg></span>About</button>
     </div>
     <p class="tagline">Fast chairs. Slow promotions. Productivity has officially been postponed.</p>
   </div>
   <a id="studio" href="https://auchomage.com/" target="_blank" rel="noopener noreferrer">au ch&ocirc;mage studios &copy;</a>
+</div>
+
+<div id="about" class="screen hidden">
+  <div class="brand small"><span class="l1">About</span></div>
+  <div class="aboutScroll">
+    <section class="aboutSec">
+      <h3>The idea</h3>
+      <p>Somewhere in an open-plan office, four colleagues have decided the fastest way between
+      two desks is a racing line. Chair Chase is five laps of that argument, across five
+      workplaces, on a chair that was never designed for this.</p>
+    </section>
+
+    <section class="aboutSec support">
+      <h3>Support the game</h3>
+      <p>Chair Chase is free, carries no ads, and is made by one small studio. If it has cost you
+      an afternoon you were supposed to spend working, you can buy us a coffee.</p>
+      <div id="bmcSlot">
+        <a class="coffeeBtn" id="bmcFallback" href="https://buymeacoffee.com/chairchase"
+           target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true"><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Zm13 1.5h1.6a2.4 2.4 0 0 1 0 4.8H17M3 21h15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Support the game</a>
+      </div>
+    </section>
+
+    <section class="aboutSec">
+      <h3>Controls</h3>
+      <ul class="keyList">
+        <li><b>&#9664; &#9654;</b><span>Steer</span></li>
+        <li><b>&#9650;</b><span>Accelerate</span></li>
+        <li><b>&#9660;</b><span>Brake and reverse</span></li>
+        <li><b>Space</b><span>Boost, once the bar is full</span></li>
+        <li><b>V</b><span>Hold through a corner to drift</span></li>
+        <li><b>X</b><span>Your character&rsquo;s special ability</span></li>
+        <li><b>F</b><span>Switch to the first-person view</span></li>
+        <li><b>Esc</b><span>Pause</span></li>
+      </ul>
+      <p class="aboutFine">On a phone, steer with the stick and use the buttons on the right.
+      Turn the handset sideways to race.</p>
+    </section>
+
+    <section class="aboutSec">
+      <h3>Drifting is worth learning</h3>
+      <p>Hold <b>V</b> through a corner and the chair steps out sideways. The longer you hold a
+      clean slide, the bigger the payout when you let go: a burst of speed, and a large
+      chunk of your boost bar refilled. Boost otherwise takes eight seconds to recharge on its
+      own, so drifting well is the difference between three boosts a lap and five.</p>
+      <p>Every chair slides differently. The Gaming Chair swings out furthest and is hardest to
+      hold; the Folding Chair barely steps out at all but costs almost nothing to slide.</p>
+    </section>
+
+    <section class="aboutSec">
+      <h3>The leaderboard</h3>
+      <p>Finish a race and your best lap, the ground you covered and the number of HR complaints
+      you generated all go to a shared board. Whoever runs the most races in a day takes Employee
+      of the Month, and their face goes on the monitor in the chair select screen until somebody
+      beats them.</p>
+    </section>
+  </div>
+  <div class="resultBtns">
+    <button class="go alt" id="aboutBackBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><path d="M12 3 L2.5 11.5 H5.5 V20 H10 V14.5 H14 V20 H18.5 V11.5 H21.5 Z" fill="currentColor"/></svg></span>Back</button>
+  </div>
 </div>
 
 <div id="board" class="screen hidden">
@@ -5909,6 +6003,15 @@ addEventListener('keydown', e => {
   if (isTypingTarget(e)) return;
   if (e.code === 'KeyF' && mode === 'race') { setPov(!povMode); e.preventDefault(); return; }
   if (e.code === 'Escape') {
+    // Both of these live over the title screen and previously trapped you until
+    // you found the Back button.
+    const about = document.getElementById('about'), board = document.getElementById('board');
+    if (about && !about.classList.contains('hidden')) {
+      document.getElementById('aboutBackBtn').click(); e.preventDefault(); return;
+    }
+    if (board && !board.classList.contains('hidden')) {
+      document.getElementById('boardBackBtn').click(); e.preventDefault(); return;
+    }
     if (mode === 'menu') { document.getElementById('backBtn').click(); e.preventDefault(); return; }
     if (mode === 'race' && running && !raceOver) { paused ? resumeGame() : pauseGame(); e.preventDefault(); return; }
   }
@@ -6066,6 +6169,7 @@ function showTitle() {
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('start').classList.remove('hidden');
   document.getElementById('board').classList.add('hidden');
+  document.getElementById('about').classList.add('hidden');
   const ni = document.getElementById('playerName');
   if (ni) ni.value = ensureName();
   document.getElementById('muteBtn').style.display = 'block';
@@ -6074,7 +6178,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
@@ -6260,6 +6364,49 @@ nameInput.addEventListener('input', () => Leaderboard.setName(cleanName(nameInpu
 nameInput.addEventListener('keydown', e => { if (e.code === 'Enter') document.getElementById('startBtn').click(); });
 
 document.getElementById('boardBtn').onclick = () => { Sound.unlock(); Sound.click(); showBoard(); };
+// Buy Me A Coffee's own button, loaded on demand rather than on page load. It is
+// a third-party script and this page is a game: no reason to spend a request and
+// parse time on it before anyone has asked to see the About panel.
+//
+// The plain link underneath stays until the real button actually appears. Script
+// blockers commonly block this domain, and a missing button would silently mean
+// no way to donate at all.
+let bmcAsked = false;
+function loadCoffeeButton() {
+  if (bmcAsked) return;
+  bmcAsked = true;
+  const slot = document.getElementById('bmcSlot');
+  const fb = document.getElementById('bmcFallback');
+  if (!slot) return;
+  const sc = document.createElement('script');
+  sc.src = 'https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js';
+  const attrs = {
+    'data-name': 'bmc-button', 'data-slug': 'chairchase', 'data-color': '#FFDD00',
+    'data-emoji': '\uD83D\uDEE0\uFE0F', 'data-font': 'Poppins', 'data-text': 'SUPPORT THE GAME',
+    'data-outline-color': '#000000', 'data-font-color': '#000000', 'data-coffee-color': '#ffffff'
+  };
+  for (const k in attrs) sc.setAttribute(k, attrs[k]);
+  // Retire the plain link only once the script has actually put something in the
+  // slot. If it is blocked, onload never fires and the link simply stays.
+  sc.onload = () => setTimeout(() => {
+    const injected = [...slot.children].some(el => el !== fb && el.tagName !== 'SCRIPT');
+    if (injected && fb) fb.style.display = 'none';
+  }, 500);
+  slot.appendChild(sc);
+}
+
+document.getElementById('aboutBtn').onclick = () => {
+  Sound.unlock(); Sound.click();
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('about').classList.remove('hidden');
+  document.querySelector('.aboutScroll').scrollTop = 0;   // always open at the top
+  loadCoffeeButton();
+};
+document.getElementById('aboutBackBtn').onclick = () => {
+  Sound.click();
+  document.getElementById('about').classList.add('hidden');
+  showTitle();
+};
 document.getElementById('boardBackBtn').onclick = () => {
   Sound.click();
   document.getElementById('board').classList.add('hidden');
