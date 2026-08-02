@@ -319,6 +319,44 @@
       top:calc(10px + var(--sat)); width:44px; height:44px; }
   }
 
+  /* ---- multiplayer lobby ---- */
+  /* The room code is the whole feature, so it gets to be the biggest thing on
+     the screen after the wordmark. Everything else here is deliberately quiet. */
+  #lobby .brand { margin-bottom:18px; }
+  .roomCode { display:flex; align-items:center; gap:14px; margin-bottom:6px; }
+  .roomCode .lab { font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:#7fa3ab; }
+  .roomCode .code { font-size:clamp(30px,6vw,46px); letter-spacing:10px; font-style:italic;
+    color:#ffd34d; text-shadow:3px 3px 0 rgba(0,0,0,.35); padding-left:6px; }
+  .copyRow { display:flex; gap:10px; align-items:center; margin:2px 0 22px; }
+  .linkBox { font-family:Verdana,sans-serif; font-size:13px; letter-spacing:0; color:#bfe4ea;
+    background:rgba(9,14,17,.72); border:2px solid rgba(53,182,196,.35); padding:9px 13px;
+    width:min(360px,62vw); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .copyBtn { font:inherit; font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:#0c1418;
+    background:#35b6c4; border:none; padding:11px 18px; cursor:pointer; transform:skewX(-8deg); }
+  .copyBtn:hover { background:#5ccbd7; }
+  .copyBtn.done { background:#7bc47f; }
+  .lobbyList { list-style:none; margin:0 0 6px; padding:0; width:min(460px,92vw); }
+  .lobbyList li { display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:6px;
+    background:rgba(16,26,30,.62); border-left:4px solid rgba(53,182,196,.4); font-size:15px; }
+  .lobbyList li.you { background:rgba(53,182,196,.2); border-left-color:#ffd34d; }
+  .lobbyList .dot { width:13px; height:13px; border-radius:50%; flex:none; }
+  .lobbyList .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lobbyList .kit { font-family:Verdana,sans-serif; font-size:12px; color:#8fb3ba; }
+  .lobbyList .tag { font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:#ffd34d; }
+  .lobbyNote { font-family:Verdana,sans-serif; font-size:12.5px; color:#7fa3ab; margin:10px 0 0; text-align:center; max-width:44ch; }
+  .lobbyNote.warn { color:#e8a06a; }
+  #lobbyMapRow .rowLab { min-width:auto; }
+  #lobbyBtns { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+  #lobbyBtns .go { margin-top:22px; }
+
+  /* Free-drive HUD chip: replaces the lap banner, which has nothing to say when
+     there are no laps. */
+  #netChip { display:flex; align-items:center; gap:10px; padding:7px 16px; background:rgba(14,22,26,.72);
+    border-left:4px solid #35b6c4; font-size:13px; letter-spacing:1.6px; text-transform:uppercase; }
+  #netChip .cd { color:#ffd34d; letter-spacing:4px; }
+  #netChip .pc { color:#bfe4ea; font-family:Verdana,sans-serif; letter-spacing:0; font-size:12px; }
+  #netChip.off { border-left-color:#e8a06a; }
+
   /* ---- name entry + leaderboard ---- */
   .nameRow { margin:14px 0 4px; }
   .nameInput { font:inherit; font-size:17px; letter-spacing:1px; color:#eaf7f9; background:rgba(9,14,17,.72);
@@ -516,6 +554,7 @@
       <div class="poslabel">POS</div>
       <div id="posNum">1<span class="tot">/4</span></div>
     </div>
+    <div id="netChip" class="hidden"><span class="cd"></span><span class="pc"></span></div>
     <div id="lapWrap" class="banner"><div class="inner"><div class="lab">LAP</div><div id="lapNum">1<b>/3</b></div><div id="timeNum" class="lapTime">0:00.00</div></div></div>
   </div>
   <div id="hudBottom">
@@ -625,6 +664,7 @@
     <div class="titleBtns">
       <button class="go" id="startBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Start</button>
       <button class="go alt" id="boardBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><rect x="3" y="12" width="5" height="9" fill="currentColor"/><rect x="9.5" y="6" width="5" height="15" fill="currentColor"/><rect x="16" y="9" width="5" height="12" fill="currentColor"/></svg></span>Leaderboard</button>
+      <button class="go alt" id="netBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="2.6" fill="currentColor" stroke="none"/><circle cx="18" cy="18" r="2.6" fill="currentColor" stroke="none"/><path d="M8.3 10.9 L15.7 7.1 M8.3 13.1 L15.7 16.9"/></svg></span>Race a colleague</button>
       <button class="go alt" id="aboutBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="10.7" y="10" width="2.6" height="8" fill="currentColor"/><rect x="10.7" y="5.6" width="2.6" height="2.8" fill="currentColor"/></svg></span>About</button>
     </div>
     <p class="tagline">Fast chairs. Slow promotions. Productivity has officially been postponed.</p>
@@ -700,6 +740,23 @@
   <div id="boardNote" class="boardNote"></div>
   <div class="resultBtns">
     <button class="go alt" id="boardBackBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><path d="M12 3 L2.5 11.5 H5.5 V20 H10 V14.5 H14 V20 H18.5 V11.5 H21.5 Z" fill="currentColor"/></svg></span>Back</button>
+  </div>
+</div>
+
+<div id="lobby" class="screen hidden">
+  <div class="brand small"><span class="l1">Office Party</span></div>
+  <div class="roomCode"><span class="lab">Room</span><span class="code" id="lobbyCode">----</span></div>
+  <div class="copyRow">
+    <div class="linkBox" id="lobbyLink"></div>
+    <button class="copyBtn" id="lobbyCopy">Copy link</button>
+  </div>
+  <div class="boardRow" id="lobbyMapRow"><span class="rowLab">Track</span><div id="lobbyMaps" class="boardTabs"></div></div>
+  <ol class="lobbyList" id="lobbyList"></ol>
+  <p class="lobbyNote" id="lobbyNote"></p>
+  <div id="lobbyBtns">
+    <button class="go" id="lobbyDriveBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Drive</button>
+    <button class="go alt" id="lobbyKitBtn">Change chair</button>
+    <button class="go alt" id="lobbyLeaveBtn">Leave</button>
   </div>
 </div>
 
@@ -2035,6 +2092,13 @@ let startPending = false;   // guards the deferred scene build
 let crowdHypeT = 0, crowdHypeAmp = 1;
 let raceT = 0; // seconds since the lights go green; drives every lap/total time
 let selChair = 'gaming', selChar = 'manager', selMap = 'office';
+// Free drive is the multiplayer sandbox: same physics, same track, but no laps,
+// no positions and no AI. Everything that only makes sense inside a race checks
+// this rather than being torn out.
+let freeDrive = false;
+// The selection menu is reused by the lobby, which only wants chair and
+// character. Set while that flow is running so the menu knows where to go back to.
+let netFlow = false;
 let particles = [], chevrons = [], elapsed = 0, frame = 0;
 let crowd = [], crossers = [], papers = [], startSheets = [];
 let finalLapShown = false, hintShown = false, lastCountShown = -1, lastResumeShown = -1;
@@ -2822,7 +2886,8 @@ function refreshMenu() {
   } else {
     sp.classList.add('hidden');
   }
-  document.querySelector('#nextBtn span').textContent = stepIdx === menuSteps.length - 1 ? 'Race!' : 'Next';
+  const lastStep = netFlow ? 1 : menuSteps.length - 1;
+  document.querySelector('#nextBtn span').textContent = stepIdx === lastStep ? (netFlow ? 'Done' : 'Race!') : 'Next';
   setShowcase(st.build(key), st.scale);
 }
 function openMenu(step) {
@@ -2835,6 +2900,7 @@ function openMenu(step) {
   optIdx = Math.max(0, st.keys.indexOf(st.get()));
   document.getElementById('start').classList.add('hidden');
   document.getElementById('results').classList.add('hidden');
+  document.getElementById('lobby').classList.add('hidden');
   menuUI.classList.remove('hidden');
   refreshMenu();
 }
@@ -2848,13 +2914,18 @@ document.getElementById('arrowL').onclick = () => cycleOption(-1);
 document.getElementById('arrowR').onclick = () => cycleOption(1);
 document.getElementById('backBtn').onclick = () => {
   Sound.back();
-  if (stepIdx === 0) showTitle();
-  else openMenu(stepIdx - 1);
+  if (stepIdx > 0) { openMenu(stepIdx - 1); return; }
+  if (netFlow) { netFlow = false; showLobby(); return; }
+  showTitle();
 };
 document.getElementById('nextBtn').onclick = () => {
   Sound.select();
-  if (stepIdx === menuSteps.length - 1) {
-    startRace();          // hides the menu itself, once the scene actually exists
+  // The lobby owns the track choice, so the multiplayer flow stops one step
+  // short and hands back rather than starting anything.
+  const last = netFlow ? 1 : menuSteps.length - 1;
+  if (stepIdx === last) {
+    if (netFlow) { netFlow = false; menuUI.classList.add('hidden'); Net.sendKit(); showLobby(); }
+    else startRace();     // hides the menu itself, once the scene actually exists
   } else openMenu(stepIdx + 1);
 };
 
@@ -4574,6 +4645,7 @@ function startRace() {
 }
 
 function buildRaceNow() {
+  endFreeDrive();
   menuUI.classList.add('hidden');
   buildScene(selMap);
   racers = [];
@@ -4893,6 +4965,33 @@ function cashDrift(r, maxS) {
   }
 }
 
+// Legs and torso, driven purely from speed and the boost flag. Split out of
+// updateRacer because remote chairs need exactly this and none of the physics
+// above it: whether a rider is pumping or reclining has to look the same
+// whether the speed came from the keyboard or off the wire.
+function animateRider(r, dt) {
+  if (!r.legs) return;
+  const spd = Math.abs(r.speed);
+  const lerp = (a, t) => a + (t - a) * Math.min(dt * 9, 1);
+  if (r.boostT > 0) {
+    // coasting on boost: recline into the chair and kick the legs up
+    r.legs[0].rotation.x = lerp(r.legs[0].rotation.x, -0.85);
+    r.legs[1].rotation.x = lerp(r.legs[1].rotation.x, -0.7);
+    if (r.upper) r.upper.rotation.x = lerp(r.upper.rotation.x, -0.26);
+  } else {
+    if (r.upper) r.upper.rotation.x = lerp(r.upper.rotation.x, 0);
+    if (spd > 0.4) {
+      const amp = Math.min(0.9, 0.4 + spd * 0.03);
+      const ph = elapsed * (5 + spd * 0.6) + r.legPhase;
+      r.legs[0].rotation.x = 0.55 + Math.sin(ph) * amp;
+      r.legs[1].rotation.x = 0.55 + Math.sin(ph + Math.PI) * amp;
+    } else {
+      r.legs[0].rotation.x = lerp(r.legs[0].rotation.x, 0);
+      r.legs[1].rotation.x = lerp(r.legs[1].rotation.x, 0);
+    }
+  }
+}
+
 function updateRacer(r, dt, controlsOn) {
   const S = r.stats;
   if (r.driftBoostT > 0) r.driftBoostT -= dt;
@@ -5156,7 +5255,7 @@ function updateRacer(r, dt, controlsOn) {
       if (lt > 1) { r.lapTimes.push(lt); if (!r.bestLap || lt < r.bestLap) r.bestLap = lt; }
       r.lapStart = raceT;
       r.lap++;
-      if (r.lap >= LAPS && !r.finished) {
+      if (r.lap >= LAPS && !r.finished && !freeDrive) {
         r.finished = true; r.totalTime = raceT; finishOrder.push(r); r.place = finishOrder.length;
         if (r.isPlayer) {
           finishFxT = FINISH_FX; camKick = Math.max(camKick, 0.05); Sound.go();
@@ -5192,27 +5291,7 @@ function updateRacer(r, dt, controlsOn) {
   }
 
   r.mesh.position.copy(r.pos);
-  if (r.legs) {
-    const spd = Math.abs(r.speed);
-    const lerp = (a, t) => a + (t - a) * Math.min(dt * 9, 1);
-    if (r.boostT > 0) {
-      // coasting on boost: recline into the chair and kick the legs up
-      r.legs[0].rotation.x = lerp(r.legs[0].rotation.x, -0.85);
-      r.legs[1].rotation.x = lerp(r.legs[1].rotation.x, -0.7);
-      if (r.upper) r.upper.rotation.x = lerp(r.upper.rotation.x, -0.26);
-    } else {
-      if (r.upper) r.upper.rotation.x = lerp(r.upper.rotation.x, 0);
-      if (spd > 0.4) {
-        const amp = Math.min(0.9, 0.4 + spd * 0.03);
-        const ph = elapsed * (5 + spd * 0.6) + r.legPhase;
-        r.legs[0].rotation.x = 0.55 + Math.sin(ph) * amp;
-        r.legs[1].rotation.x = 0.55 + Math.sin(ph + Math.PI) * amp;
-      } else {
-        r.legs[0].rotation.x = lerp(r.legs[0].rotation.x, 0);
-        r.legs[1].rotation.x = lerp(r.legs[1].rotation.x, 0);
-      }
-    }
-  }
+  animateRider(r, dt);
   if (r.air) { const u = 1 - r.air.t / r.air.dur; r.mesh.position.y = r.pos.y + Math.sin(Math.PI * u) * r.air.H; }
   else if (Math.abs(r.speed) > 5) r.mesh.position.y = r.pos.y + Math.abs(Math.sin(elapsed * 13 + (r.gridSlot || 0))) * 0.045;
   const hd = normAngle(r.dir - (r.lastDir === undefined ? r.dir : r.lastDir)) / Math.max(dt, 0.001);
@@ -5426,7 +5505,7 @@ function updateAbilities(dt, active) {
     // Rivals now wait for a reason rather than firing the instant the cooldown
     // clears. Aura abilities want a victim in range; speed abilities want road
     // to spend them on.
-    if (active && !r.isPlayer && !r.finished && r.abilityT <= 0 && r.abilityCd <= 0) {
+    if (active && !r.isPlayer && !r.isRemote && !r.finished && r.abilityT <= 0 && r.abilityCd <= 0) {
       const ab = ABILITIES[r.charKey];
       let worth = false;
       if (ab && (ab.aura === 'wobble' || ab.aura === 'slow')) {
@@ -5485,6 +5564,10 @@ function updateAbilities(dt, active) {
 function racerCollisions() {
   for (let i = 0; i < racers.length; i++) for (let j = i+1; j < racers.length; j++) {
     const a = racers[i], b = racers[j];
+    // Contact between a simulated chair and a relayed one would resolve
+    // differently in each browser and the two would drift apart. Stage 3's
+    // problem; until then remote chairs are ghosts.
+    if (a.isRemote || b.isRemote) continue;
     const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
     const d2 = dx*dx + dz*dz, min = 2.1;
     if (d2 < min*min && d2 > 0.0001) {
@@ -5599,6 +5682,17 @@ function updateLiveOrder(order, dt) {
   if (loT > 0) return;
   loT = 0.125;
   const p = racers[playerIdx];
+  // In free drive there is no order to report, so the same panel becomes a
+  // presence list: who is here, and how fast they are going.
+  if (freeDrive) {
+    for (let i = 0; i < loRows.length; i++) {
+      const e = loRows[i];
+      if (e.lastPl !== i + 1) { e.lastPl = i + 1; e.row.style.order = i; e.pl.textContent = ''; }
+      const g = String(Math.max(0, Math.round(e.r.speed * 2.2)));
+      if (e.lastGap !== g) { e.lastGap = g; e.gap.textContent = g; }
+    }
+    return;
+  }
   for (let i = 0; i < order.length; i++) {
     const r = order[i];
     const e = loRows.find(x => x.r === r);
@@ -5627,10 +5721,12 @@ function updateHUD() {
     (a.finished && b.finished) ? a.place - b.place :
     a.finished ? -1 : b.finished ? 1 : b.progress - a.progress);
   const rank = order.indexOf(p) + 1;
-  posEl.innerHTML = rank + '<span class="tot">/' + racers.length + '</span>';
-  posWrapEl.classList.toggle('lead', rank === 1);
-  lapEl.innerHTML = Math.min(p.lap + 1, LAPS) + '<b>/' + LAPS + '</b>';
-  timeEl.textContent = fmtTime(p.finished ? p.totalTime : raceT - p.lapStart);
+  if (!freeDrive) {
+    posEl.innerHTML = rank + '<span class="tot">/' + racers.length + '</span>';
+    posWrapEl.classList.toggle('lead', rank === 1);
+    lapEl.innerHTML = Math.min(p.lap + 1, LAPS) + '<b>/' + LAPS + '</b>';
+    timeEl.textContent = fmtTime(p.finished ? p.totalTime : raceT - p.lapStart);
+  }
   speedEl.textContent = String(Math.max(0, Math.round(p.speed * 2.2))).padStart(3, '0');
   const ready = p.boost >= 100;
   if (ready && !hudPrevReady && !p.finished) Sound.click();
@@ -5660,9 +5756,9 @@ function updateHUD() {
     abilityBarEl.style.borderColor = (armed || running) ? ab.css : 'rgba(53,182,196,.4)';
     abilityNameEl.style.color = (armed || running) ? ab.css : '#cfe9ec';
   }
-  if (rank !== hudLastRank) { hudLastRank = rank; posWrapEl.classList.remove('pulse'); void posWrapEl.offsetWidth; posWrapEl.classList.add('pulse'); }
+  if (!freeDrive && rank !== hudLastRank) { hudLastRank = rank; posWrapEl.classList.remove('pulse'); void posWrapEl.offsetWidth; posWrapEl.classList.add('pulse'); }
   const lapShown = Math.min(p.lap + 1, LAPS);
-  if (lapShown !== hudLastLap) { if (hudLastLap > 0 && lapShown < LAPS && !p.finished) Sound.beep(); hudLastLap = lapShown; }
+  if (!freeDrive && lapShown !== hudLastLap) { if (hudLastLap > 0 && lapShown < LAPS && !p.finished) Sound.beep(); hudLastLap = lapShown; }
   boostLabelEl.textContent = ready ? 'BOOST READY' : 'BOOST';
   boostEl.style.width = p.boost + '%';
   // drift meter: charge banked so far, and the tier it would pay out at
@@ -5671,7 +5767,7 @@ function updateHUD() {
   const dTier = DRIFT_TIERS.find(t => p.driftMeter >= t.at);
   driftNameEl.textContent = dTier ? dTier.label.replace('!', '') : '';
   driftNameEl.style.color = dTier ? dTier.css : '#cfe9ec';
-  if (!finalLapShown && p.lap === LAPS - 1 && !p.finished) {
+  if (!freeDrive && !finalLapShown && p.lap === LAPS - 1 && !p.finished) {
     finalLapShown = true;
     finalLapEl.classList.add('show');
     setTimeout(() => finalLapEl.classList.remove('show'), 1900);
@@ -5891,7 +5987,11 @@ function animate() {
     }
     const active = countdownT <= 0.6;
     if (controlsOn && !racers[playerIdx].finished) raceT += dt;
-    for (const r of racers) updateRacer(r, dt, controlsOn);
+    // The one structural change multiplayer forces. A remote chair's position is
+    // a fact that arrived over the wire, not something to work out from inputs,
+    // so it never enters the physics.
+    for (const r of racers) r.isRemote ? updateRemote(r, dt) : updateRacer(r, dt, controlsOn);
+    if (freeDrive) Net.tick(dt);
     updateAbilities(dt, active);
     racerCollisions();
     updateParticles(dt);
@@ -6145,12 +6245,20 @@ function resumeGame() {
 }
 document.getElementById('pauseBtn').onclick = () => { Sound.click(); pauseGame(); };
 document.getElementById('resumeBtn').onclick = () => { Sound.click(); resumeGame(); };
-document.getElementById('restartBtn').onclick = () => { Sound.click(); bankRun(); paused = false; document.getElementById('pause').classList.add('hidden'); startRace(); };
+document.getElementById('restartBtn').onclick = () => {
+  Sound.click(); bankRun(); paused = false;
+  document.getElementById('pause').classList.add('hidden');
+  if (freeDrive) { endFreeDrive(); showLobby(); } else startRace();
+};
 document.getElementById('menuBtn').onclick = () => { Sound.click(); bankRun(); running = false; showTitle(); };
 
 // ---------- title / results ----------
 function showTitle() {
   mode = 'title'; running = false; paused = false; resumeT = 0;
+  netFlow = false;
+  endFreeDrive();
+  Net.leave();
+  document.getElementById('lobby').classList.add('hidden');
   // The title screen renders the same 3D scene as the selection menu, so the
   // desk monitor is on camera here too. Fetching only in openMenu() left it
   // blank until you had been into the menu once.
@@ -6178,7 +6286,7 @@ function showTitle() {
 // ================= LEADERBOARD =================
 // Point this at your deployed Worker to make the board global and shared.
 // Left empty, everything still works, but scores stay in this browser only.
-const LEADERBOARD_URL = 'https://chair-chase-leaderboard.au-chomage.workers.dev';
+const LEADERBOARD_URL = '';
 
 const M_PER_UNIT = 2.2 / 3.6;   // keeps distance consistent with the km/h readout
 function fmtDist(units) {
@@ -6201,6 +6309,9 @@ function cleanName(raw) {
 // or bailed out on lap two. Guarded so a race can only ever bank once.
 let raceBanked = false;
 function bankRun(useBeacon) {
+  // Free drive has no laps, no finish and no bounded distance. Nothing about it
+  // belongs on a board that ranks races.
+  if (freeDrive) return;
   if (raceBanked || !racers.length) return;
   const p = racers[playerIdx];
   if (!p) return;
@@ -6435,9 +6546,518 @@ document.getElementById('muteBtn').onclick = () => {
 // logo image (embedded) for the title
 document.getElementById('titleLogo').src = LOGO_URI;
 
+// ================= MULTIPLAYER: rooms, lobby, free drive =================
+// Point this at the deployed race Worker to switch multiplayer on. Left empty,
+// the button explains itself and nothing else in the game changes.
+const RACE_URL = 'https://chair-chase-race.au-chomage.workers.dev';
+
+// Codes are read aloud and typed by hand, so the alphabet drops every character
+// that has a lookalike: no O/0, no I/1, no S/5.
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRTUVWXYZ23469';
+function makeRoomCode() {
+  let c = '';
+  const r = crypto.getRandomValues(new Uint8Array(4));
+  for (let i = 0; i < 4; i++) c += CODE_ALPHABET[r[i] % CODE_ALPHABET.length];
+  return c;
+}
+function roomLink(code) {
+  return location.origin + location.pathname + '#r=' + code;
+}
+function wsBase() {
+  return RACE_URL.trim().replace(/\/+$/, '').replace(/^http/, 'ws');
+}
+
+// ---------- name tags ----------
+// Remote chairs need to be identifiable from across a warehouse, so the tag
+// ignores the depth buffer and draws over whatever is in front of it. Finding a
+// colleague matters more here than the geometry being strictly honest.
+const _tagCache = {};
+function nameTagSprite(text) {
+  let tex = _tagCache[text];
+  if (!tex) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    const g = c.getContext('2d');
+    g.font = 'bold 30px Verdana, sans-serif';
+    const w = Math.min(240, g.measureText(text).width + 26);
+    const x = (256 - w) / 2;
+    g.fillStyle = 'rgba(12,20,24,.78)';
+    g.fillRect(x, 12, w, 40);
+    g.fillStyle = '#35b6c4';
+    g.fillRect(x, 12, 4, 40);
+    g.fillStyle = '#eaf7f9';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, 128, 33, w - 20);
+    tex = _tagCache[text] = new THREE.CanvasTexture(c);
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  sp.scale.set(3.6, 0.9, 1);
+  sp.position.y = 2.9;
+  sp.renderOrder = 999;
+  return sp;
+}
+
+// ---------- remote racers ----------
+// How far behind live a remote chair is drawn. Snapshots arrive ~15 times a
+// second, so a tenth of a second means there is almost always a pair to
+// interpolate between and the chair glides instead of stepping.
+const REMOTE_DELAY = 0.10;
+
+function makeRemoteRacer(peer, slot) {
+  const chairKey = CHAIRS[peer.chairKey] ? peer.chairKey : 'ergo';
+  const charKey = CHARACTERS[peer.charKey] ? peer.charKey : 'manager';
+  const r = makeRacer(chairKey, CHARACTERS[charKey], false, slot + 1, charKey);
+  r.ai = null;
+  r.isRemote = true;
+  r.netId = peer.id;
+  r.name = peer.name;
+  r.buf = [];            // {t,x,y,z,ry,sp,f} in local receive time
+  r.tag = nameTagSprite(peer.name);
+  r.mesh.add(r.tag);
+  return r;
+}
+
+function addRemote(peer) {
+  if (!scene || !racers || racers.some(r => r.netId === peer.id)) return;
+  racers.push(makeRemoteRacer(peer, racers.length));
+  buildLiveOrder();
+}
+
+function dropRemote(id) {
+  const i = racers.findIndex(r => r.netId === id);
+  if (i < 0) return;
+  const r = racers[i];
+  if (r.tag) { r.mesh.remove(r.tag); r.tag.material.dispose(); }
+  scene.remove(r.mesh);
+  racers.splice(i, 1);
+  playerIdx = racers.findIndex(x => x.isPlayer);
+  buildLiveOrder();
+}
+
+// A remote chair is drawn from the buffer, not worked out from inputs. Everything
+// downstream of position - the mesh, the legs, the dust - runs exactly as it does
+// for a local chair, so a colleague across the room looks like a racer and not
+// like a marker being dragged around.
+function updateRemote(r, dt) {
+  const buf = r.buf;
+  if (!buf.length) return;
+  // Wall clock, not the game's scaled clock, because snapshots are stamped in
+  // wall clock when they arrive. Free drive has no slow motion so the two never
+  // disagree; when the finish sequence returns in stage 2, the delay target is
+  // what has to slow down, not this subtraction.
+  const target = performance.now() / 1000 - REMOTE_DELAY;
+  // Keep the pair that brackets the render time; throw away anything older.
+  while (buf.length > 2 && buf[1].t <= target) buf.shift();
+
+  let a = buf[0], b = buf[1], k = 0;
+  if (b && b.t > a.t) k = Math.max(0, Math.min(1, (target - a.t) / (b.t - a.t)));
+  else b = a;
+  // Clamped rather than extrapolated on purpose. A chair that freezes for a
+  // moment during a hiccup is easier to read than one that carries on through a
+  // wall and snaps back when the packets catch up.
+  const px = a.x + (b.x - a.x) * k;
+  const py = a.y + (b.y - a.y) * k;
+  const pz = a.z + (b.z - a.z) * k;
+  const ry = a.ry + normAngle(b.ry - a.ry) * k;
+  const sp = a.sp + (b.sp - a.sp) * k;
+
+  const boosting = (b.f & 1) !== 0, sliding = (b.f & 2) !== 0;
+  r.pos.set(px, 0, pz);
+  r.speed = sp;
+  r.heading = ry;
+  r.dir = ry;
+  r.boostT = boosting ? 0.2 : 0;
+  r.progress = 0;
+
+  r.mesh.position.set(px, py, pz);
+  r.mesh.rotation.y = ry;
+  const rollT = sliding ? -Math.sign(normAngle(ry - (r.lastRy === undefined ? ry : r.lastRy))) * 0.16 : 0;
+  r.lastRy = ry;
+  r.roll = (r.roll || 0) + (rollT - (r.roll || 0)) * Math.min(dt * 7, 1);
+  r.mesh.rotation.z = r.roll;
+  animateRider(r, dt);
+
+  // Same dust budget as a local chair, so speed reads the same from outside.
+  if (Math.abs(sp) > 16 || sliding) {
+    r.dustT -= dt;
+    if (r.dustT <= 0) {
+      const bx = px - Math.sin(ry) * 1.1, bz = pz - Math.cos(ry) * 1.1;
+      spawnDust(bx, bz, boosting);
+      r.dustT = sliding ? 0.03 : (boosting ? 0.03 : 0.07);
+    }
+  }
+}
+
+// ---------- the socket ----------
+const Net = (() => {
+  let ws = null, code = '', myId = '', hostId = '', open = false;
+  let peers = new Map();          // id -> {id,name,chair,char}
+  let sendAcc = 0, retries = 0, retryTimer = 0;
+  let wantOpen = false;           // did we ask to be connected, or did we leave
+  const SEND_DT = 1 / 15;
+
+  const listeners = { roster: [], map: [], status: [] };
+  const emit = (k, v) => listeners[k].forEach(f => f(v));
+
+  function url() {
+    const n = encodeURIComponent(ensureName());
+    return wsBase() + '/room/' + code + '?name=' + n + '&chair=' + Object.keys(CHAIRS).indexOf(selChair) +
+           '&char=' + Object.keys(CHARACTERS).indexOf(selChar);
+  }
+
+  function decodeKit(p) {
+    const ck = Object.keys(CHAIRS)[p.chair] || 'ergo';
+    const hk = Object.keys(CHARACTERS)[p.char] || 'manager';
+    return { id: p.id, name: p.name, chairKey: ck, charKey: hk };
+  }
+
+  function handle(msg) {
+    // Position frames are the only thing that arrives often, so they are checked
+    // first and never go near JSON.
+    if (msg.charCodeAt(0) === 83 /* S */ && msg.charCodeAt(1) === 124 /* | */) {
+      const f = msg.split('|');
+      const r = racers && racers.find(x => x.netId === f[1]);
+      if (!r || !r.buf) return;
+      r.buf.push({
+        t: performance.now() / 1000,
+        x: +f[2], y: +f[3], z: +f[4], ry: +f[5], sp: +f[6], f: +f[7] | 0
+      });
+      if (r.buf.length > 20) r.buf.shift();
+      return;
+    }
+    let d; try { d = JSON.parse(msg); } catch { return; }
+    if (d.t === 'welcome') {
+      myId = d.you.id; hostId = d.host; retries = 0;
+      peers = new Map();
+      d.peers.forEach(p => peers.set(p.id, decodeKit(p)));
+      const mapKey = Object.keys(MAPS)[d.map];
+      if (mapKey && !isHost()) selMap = mapKey;
+      else if (isHost()) sendMap();
+      emit('map');
+      emit('roster');
+      emit('status');
+      if (freeDrive) peers.forEach(p => addRemote(p));
+    } else if (d.t === 'join') {
+      peers.set(d.p.id, decodeKit(d.p));
+      if (freeDrive) addRemote(peers.get(d.p.id));
+      emit('roster');
+    } else if (d.t === 'leave') {
+      peers.delete(d.id);
+      hostId = d.host || hostId;
+      if (freeDrive) dropRemote(d.id);
+      emit('roster');
+    } else if (d.t === 'kit') {
+      const p = peers.get(d.id);
+      if (p) {
+        Object.assign(p, decodeKit({ id: d.id, name: p.name, chair: d.chair, char: d.char }));
+        // Rebuilding a chair mid-drive would mean tearing down a mesh someone is
+        // sitting in. The lobby is where kit changes show, and that is enough.
+        emit('roster');
+      }
+    } else if (d.t === 'roster') {
+      peers = new Map();
+      d.peers.filter(p => p.id !== myId).forEach(p => peers.set(p.id, decodeKit(p)));
+      hostId = d.host;
+      emit('roster');
+    } else if (d.t === 'map') {
+      const mapKey = Object.keys(MAPS)[d.map];
+      if (mapKey && !isHost()) { selMap = mapKey; emit('map'); }
+    }
+  }
+
+  function connect(roomCode) {
+    if (!RACE_URL.trim()) return false;
+    code = roomCode.toUpperCase();
+    wantOpen = true;
+    location.hash = 'r=' + code;
+    try { ws = new WebSocket(url()); } catch { emit('status'); return false; }
+    ws.onopen = () => { open = true; retries = 0; emit('status'); };
+    ws.onmessage = e => handle(typeof e.data === 'string' ? e.data : '');
+    ws.onclose = () => {
+      open = false; ws = null;
+      emit('status');
+      // A dropped socket mid-drive is the most confusing way for this to fail,
+      // so it retries quietly a few times before admitting defeat.
+      if (wantOpen && retries < 5) { retries++; retryTimer = 0.6 * retries; }
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+    return true;
+  }
+
+  function leave() {
+    wantOpen = false; retries = 0;
+    peers = new Map(); myId = ''; hostId = '';
+    if (ws) { try { ws.close(); } catch {} ws = null; }
+    open = false;
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    emit('status');
+  }
+
+  function send(str) { if (ws && open) { try { ws.send(str); } catch {} } }
+  const isHost = () => !!myId && myId === hostId;
+  const sendKit = () => send(JSON.stringify({
+    t: 'kit', chair: Object.keys(CHAIRS).indexOf(selChair), char: Object.keys(CHARACTERS).indexOf(selChar)
+  }));
+  const sendMap = () => { if (isHost()) send(JSON.stringify({ t: 'map', map: Object.keys(MAPS).indexOf(selMap) })); };
+
+  // Called once per frame while driving: paces our own position updates and
+  // handles a reconnect if the socket went away.
+  function tick(dt) {
+    if (retryTimer > 0) {
+      retryTimer -= dt;
+      if (retryTimer <= 0 && wantOpen && !ws) connect(code);
+    }
+    if (!open) return;
+    sendAcc += dt;
+    if (sendAcc < SEND_DT) return;
+    sendAcc = 0;
+    const p = racers[playerIdx];
+    if (!p) return;
+    const f = ((p.boostT > 0 || p.driftBoostT > 0) ? 1 : 0) | (p.driftActive ? 2 : 0);
+    // Two decimals is ~2cm at this scale, well under what anyone can see, and it
+    // keeps a frame down to around forty bytes.
+    send('s|' + p.pos.x.toFixed(2) + '|' + p.mesh.position.y.toFixed(2) + '|' + p.pos.z.toFixed(2) +
+         '|' + p.heading.toFixed(3) + '|' + p.speed.toFixed(1) + '|' + f);
+  }
+
+  return {
+    connect, leave, tick, sendKit, sendMap, isHost,
+    on: (k, f) => listeners[k].push(f),
+    get code() { return code; },
+    get open() { return open; },
+    get connecting() { return wantOpen && !open; },
+    get peers() { return [...peers.values()]; },
+    get count() { return peers.size + (myId ? 1 : 0); }
+  };
+})();
+
+// ---------- lobby ----------
+const lobbyEl = document.getElementById('lobby');
+const lobbyNote = document.getElementById('lobbyNote');
+const netChip = document.getElementById('netChip');
+
+function showLobby() {
+  mode = 'title';
+  running = false;
+  startPending = false;   // cancels a scene build queued a frame or two ago
+  endFreeDrive();
+  Sound.setMode('menu'); Sound.duck(false);
+  document.getElementById('muteBtn').style.display = 'block';
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('board').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('touch').classList.remove('on');
+  menuUI.classList.add('hidden');
+  lobbyEl.classList.remove('hidden');
+  setShowcase(buildChair(selChair, CHARACTERS[selChar]), 1.35);
+  renderLobby();
+}
+
+function renderLobby() {
+  document.getElementById('lobbyCode').textContent = Net.code || '----';
+  document.getElementById('lobbyLink').textContent = Net.code ? roomLink(Net.code) : '';
+
+  const maps = document.getElementById('lobbyMaps');
+  const host = Net.isHost();
+  if (maps.childElementCount !== Object.keys(MAPS).length) {
+    maps.innerHTML = '';
+    Object.keys(MAPS).forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'boardTab';
+      b.textContent = MAPS[k].name;
+      b.onclick = () => { if (!Net.isHost()) return; Sound.click(); selMap = k; Net.sendMap(); renderLobby(); };
+      maps.appendChild(b);
+    });
+  }
+  [...maps.children].forEach((b, i) => {
+    b.classList.toggle('on', Object.keys(MAPS)[i] === selMap);
+    b.style.opacity = host ? '1' : '.55';
+    b.style.cursor = host ? 'pointer' : 'default';
+  });
+
+  const list = document.getElementById('lobbyList');
+  list.innerHTML = '';
+  const rows = [{ id: 'me', name: ensureName(), chairKey: selChair, charKey: selChar, me: true }]
+    .concat(Net.peers.map(p => ({ ...p, me: false })));
+  rows.forEach(p => {
+    const li = document.createElement('li');
+    if (p.me) li.className = 'you';
+    const col = '#' + CHAIRS[p.chairKey].color.toString(16).padStart(6, '0');
+    li.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="kit"></span><span class="tag"></span>';
+    li.querySelector('.dot').style.background = col;
+    li.querySelector('.nm').textContent = p.name;
+    li.querySelector('.kit').textContent = CHAIRS[p.chairKey].name + ' \u00b7 ' + CHARACTERS[p.charKey].name;
+    li.querySelector('.tag').textContent = p.me ? 'You' : '';
+    list.appendChild(li);
+  });
+
+  let note, warn = false;
+  if (!RACE_URL.trim()) {
+    note = 'No race server configured yet. Deploy the race Worker and paste its address into RACE_URL.';
+    warn = true;
+  } else if (Net.connecting) {
+    note = 'Connecting\u2026';
+  } else if (!Net.open) {
+    note = 'Lost the connection to the room.';
+    warn = true;
+  } else if (Net.count < 2) {
+    note = 'Send the link to a colleague. You can drive now and they will appear when they arrive.';
+  } else {
+    note = (host ? 'You pick the track. ' : 'The host picks the track. ') +
+           'Press Drive whenever you like \u2014 nobody waits for anybody.';
+  }
+  lobbyNote.textContent = note;
+  lobbyNote.classList.toggle('warn', warn);
+}
+
+Net.on('roster', () => { renderLobby(); updateNetChip(); });
+Net.on('status', () => { renderLobby(); updateNetChip(); });
+Net.on('map', () => { if (!lobbyEl.classList.contains('hidden')) renderLobby(); });
+
+function updateNetChip() {
+  if (!freeDrive) return;
+  netChip.classList.toggle('off', !Net.open);
+  netChip.querySelector('.cd').textContent = Net.code;
+  netChip.querySelector('.pc').textContent = Net.open
+    ? (Net.count === 1 ? 'just you' : Net.count + ' driving')
+    : 'reconnecting\u2026';
+}
+
+// ---------- free drive ----------
+// Deliberately not a race: no countdown, no laps, no rivals, no results. Just
+// the track, your chair, and whoever else has pressed Drive.
+//
+// Split in two for the same reason startRace is: building a scene is hundreds of
+// meshes, and doing it inside the click handler stops the browser painting until
+// it finishes.
+function startFreeDrive() {
+  if (startPending) return;
+  startPending = true;
+  running = false;
+  const veil = document.getElementById('loadVeil');
+  if (veil) veil.classList.add('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!startPending) { if (veil) veil.classList.remove('show'); return; }
+    try { buildFreeDriveNow(); } finally {
+      startPending = false;
+      if (veil) veil.classList.remove('show');
+    }
+  }));
+}
+
+function buildFreeDriveNow() {
+  freeDrive = true;
+  lobbyEl.classList.add('hidden');
+  menuUI.classList.add('hidden');
+  buildScene(selMap);
+  racers = []; finishOrder = []; particles = [];
+  raceOver = false; finishFxT = 0; crowdHypeT = 0;
+  paused = false; resumeT = 0;
+  finalLapShown = true;                 // there is no final lap to announce
+  elapsed = 0; raceT = 0;
+  raceBanked = true;                    // belt and braces; bankRun also refuses
+  mode = 'race'; lastCountShown = -1; lastResumeShown = -1;
+  hudPrevReady = false; hudLastLap = -1; hudLastRank = 0;
+  glitchCd = 0; notifyCd = 0; hitFxT = 0;
+  camInit = false;
+  document.getElementById('pause').classList.add('hidden');
+  document.getElementById('speedFx').classList.remove('on');
+  document.getElementById('abilityFlash').classList.remove('show');
+  document.getElementById('hud').classList.remove('glitch');
+  document.getElementById('hitFx').style.opacity = '0';
+  Sound.setMode('race'); Sound.duck(false);
+  document.getElementById('muteBtn').style.display = 'none';
+  setupCrossers();
+  clearPapers();
+
+  racers.push(makeRacer(selChair, CHARACTERS[selChar], true, 0, selChar));
+  racers[0].name = ensureName();
+  playerIdx = 0;
+  Net.peers.forEach(p => addRemote(p));
+  buildLiveOrder();
+  if (racers[0].upper) racers[0].upper.visible = !povMode;
+
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  posWrapEl.classList.add('hidden');
+  document.getElementById('lapWrap').classList.add('hidden');
+  netChip.classList.remove('hidden');
+  updateNetChip();
+  if (isTouch) document.getElementById('touch').classList.add('on');
+  checkOrientation();
+  // Below -1 so the countdown machinery stays entirely out of the way: free
+  // drive has no start, so nothing to count down to and no GO to flash.
+  countdownT = -2;
+  if (!hintShown) {
+    hintShown = true;
+    document.getElementById('controlsHint').classList.add('show');
+    setTimeout(() => document.getElementById('controlsHint').classList.remove('show'), 5000);
+  }
+  running = true;
+  clock.getDelta();
+}
+
+// Leaving free drive has to undo the HUD surgery, or a normal race afterwards
+// comes up with no position and no lap counter.
+function endFreeDrive() {
+  freeDrive = false;
+  posWrapEl.classList.remove('hidden');
+  document.getElementById('lapWrap').classList.remove('hidden');
+  netChip.classList.add('hidden');
+  for (const r of [...(racers || [])]) if (r.isRemote) dropRemote(r.netId);
+}
+
+// ---------- wiring ----------
+document.getElementById('netBtn').onclick = () => {
+  Sound.unlock(); Sound.select();
+  Leaderboard.setName(cleanName(nameInput.value));
+  if (!RACE_URL.trim()) { showLobby(); return; }
+  Net.connect(makeRoomCode());
+  showLobby();
+};
+
+document.getElementById('lobbyCopy').onclick = async () => {
+  const btn = document.getElementById('lobbyCopy');
+  const link = roomLink(Net.code);
+  try { await navigator.clipboard.writeText(link); }
+  catch {
+    // Clipboard access is refused often enough (insecure origin, Safari without
+    // a user gesture) that selecting the text is a real fallback, not padding.
+    const r = document.createRange();
+    r.selectNodeContents(document.getElementById('lobbyLink'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+  Sound.click();
+  btn.textContent = 'Copied'; btn.classList.add('done');
+  setTimeout(() => { btn.textContent = 'Copy link'; btn.classList.remove('done'); }, 1600);
+};
+
+document.getElementById('lobbyKitBtn').onclick = () => { Sound.click(); netFlow = true; openMenu(0); };
+document.getElementById('lobbyDriveBtn').onclick = () => { Sound.select(); startFreeDrive(); };
+document.getElementById('lobbyLeaveBtn').onclick = () => {
+  Sound.back();
+  endFreeDrive();
+  Net.leave();
+  lobbyEl.classList.add('hidden');
+  showTitle();
+};
+
+// Arriving on a shared link: straight into that room, no title screen detour.
+function joinFromHash() {
+  const m = (location.hash || '').match(/^#r=([A-Za-z0-9]{4,6})$/);
+  if (!m) return false;
+  if (!RACE_URL.trim()) { showLobby(); return true; }
+  Net.connect(m[1]);
+  showLobby();
+  return true;
+}
+
 addEventListener('pagehide', () => { if (mode === 'race') bankRun(true); });
 
-showTitle();
+// A shared link goes straight to its room; everything else starts at the title.
+if (!joinFromHash()) showTitle();
 </script>
 
 <!-- Cloudflare Web Analytics. Loads after the game script, is cookieless, and
