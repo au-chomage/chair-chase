@@ -58,9 +58,26 @@
   @media (max-width:600px){
     #start.title { padding-left:0; align-items:center; background:linear-gradient(180deg, rgba(9,14,17,.32), rgba(9,14,17,.84)); }
     .titleInner { text-align:center; }
+    .titleBtns { margin-left:auto; margin-right:auto; }
   }
   button.go { margin-top:28px; font:inherit; font-size:20px; font-style:italic; letter-spacing:2px; text-transform:uppercase; color:#0c1418; background:#35b6c4; border:none; padding:14px 46px; cursor:pointer; transform:skewX(-8deg); }
   button.go:hover { background:#5ccbd7; transform:skewX(-8deg) translateY(-2px); box-shadow:0 7px 0 rgba(0,0,0,.28); }
+
+  /* Title menu: four buttons in one ragged column read as a list of equals and
+     crowd the wordmark. A grid gives them a shared right edge and lets the two
+     ways to play sit above the two things that are only reference material. */
+  .titleBtns { display:grid; grid-template-columns:1fr 1fr; column-gap:20px; row-gap:13px;
+    width:min(430px,100%); margin-top:26px; }
+  .titleBtns .go { margin-top:0; width:100%; padding:14px 22px; }
+  .titleBtns #startBtn, .titleBtns #netBtn { grid-column:1 / -1; }
+  /* The pair below carries less weight, so it is smaller as well as narrower. */
+  .titleBtns #boardBtn, .titleBtns #aboutBtn { font-size:16px; letter-spacing:1.4px; padding:12px 14px; }
+  /* Multiplayer is a way to play, not a menu item, so it keeps a teal cast
+     without competing with Start for the eye. */
+  /* Deliberately not .go.alt: that rule lives further down the sheet and, at equal
+     specificity, would override this and quietly flatten the accent. */
+  .go.netGo { background:#1c3d45; color:#8fe3ee; }
+  .go.netGo:hover { background:#265059; color:#b9f1f9; }
 
   /* ---- 3D selection menu overlay ---- */
   #menuUI { position:fixed; inset:0; z-index:9; pointer-events:none; color:#fff; }
@@ -282,6 +299,7 @@
     .brand.small span { font-size:clamp(24px,5.4vh,40px); -webkit-text-stroke:3px #0f1519; }
     .tagline { margin-top:10px; font-size:12px; }
     button.go { margin-top:14px; }
+    .titleBtns { margin-top:12px; row-gap:9px; }
     #results .standings { font-size:14px; margin-top:6px; }
     #results .standings li { padding:5px 14px; margin:3px 0; }
     #resultMedal { font-size:34px; }
@@ -306,7 +324,7 @@
     .boardTab { font-size:12px; padding:8px 13px; min-height:40px; }
     #board .boardRow { flex-direction:column; align-items:center; gap:4px; }
     .nameInput { width:min(300px,78vw); font-size:16px; }
-    .titleBtns { justify-content:center; }
+    .titleBtns { margin-left:auto; margin-right:auto; }
     #pauseHint { display:none; }
     .pauseBtns .go { min-width:min(260px,80vw); }
   }
@@ -663,8 +681,8 @@
     <div class="nameRow"><input id="playerName" class="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off" spellcheck="false"></div>
     <div class="titleBtns">
       <button class="go" id="startBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Start</button>
+      <button class="go netGo" id="netBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.95em" height="0.95em" aria-hidden="true"><circle cx="8.6" cy="6.6" r="3.4" fill="currentColor"/><path d="M2.4 20.5 C2.4 15.6 5.2 13.2 8.6 13.2 C12 13.2 14.8 15.6 14.8 20.5 Z" fill="currentColor"/><circle cx="18" cy="8.4" r="2.7" fill="currentColor" opacity=".62"/><path d="M14.2 20.5 C14.2 16.6 15.9 14.8 18 14.8 C20.1 14.8 21.8 16.6 21.8 20.5 Z" fill="currentColor" opacity=".62"/></svg></span>Race a colleague</button>
       <button class="go alt" id="boardBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><rect x="3" y="12" width="5" height="9" fill="currentColor"/><rect x="9.5" y="6" width="5" height="15" fill="currentColor"/><rect x="16" y="9" width="5" height="12" fill="currentColor"/></svg></span>Leaderboard</button>
-      <button class="go alt" id="netBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="2.6" fill="currentColor" stroke="none"/><circle cx="18" cy="18" r="2.6" fill="currentColor" stroke="none"/><path d="M8.3 10.9 L15.7 7.1 M8.3 13.1 L15.7 16.9"/></svg></span>Race a colleague</button>
       <button class="go alt" id="aboutBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="10.7" y="10" width="2.6" height="8" fill="currentColor"/><rect x="10.7" y="5.6" width="2.6" height="2.8" fill="currentColor"/></svg></span>About</button>
     </div>
     <p class="tagline">Fast chairs. Slow promotions. Productivity has officially been postponed.</p>
