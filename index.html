@@ -6710,7 +6710,7 @@ function updateRemote(r, dt) {
 const Net = (() => {
   let ws = null, code = '', myId = '', hostId = '', open = false;
   let peers = new Map();          // id -> {id,name,chair,char}
-  let sendAcc = 0, retries = 0, retryTimer = 0;
+  let sendAcc = 0, retries = 0, retryHandle = 0;
   let wantOpen = false;           // did we ask to be connected, or did we leave
   const SEND_DT = 1 / 15;
 
@@ -6785,28 +6785,71 @@ const Net = (() => {
 
   function connect(roomCode) {
     if (!RACE_URL.trim()) return false;
+    // Already in this room and connected: nothing to do. Reconnecting here would
+    // hand you a new identity and briefly put two of you in the same lobby.
+    if (ws && code === roomCode.toUpperCase()) return true;
     code = roomCode.toUpperCase();
     wantOpen = true;
     location.hash = 'r=' + code;
-    try { ws = new WebSocket(url()); } catch { emit('status'); return false; }
-    ws.onopen = () => { open = true; retries = 0; emit('status'); };
-    ws.onmessage = e => handle(typeof e.data === 'string' ? e.data : '');
-    ws.onclose = () => {
+    clearTimeout(retryHandle);
+
+    // Close whatever was here first. Two live sockets from one browser means the
+    // room counts you twice, and the server dutifully relays your own position to
+    // your other connection: that is the ghost that follows you around the track.
+    closeSocket();
+
+    let sock;
+    try { sock = new WebSocket(url()); } catch { emit('status'); return false; }
+    ws = sock;
+
+    // Every handler checks it is still the current socket before touching shared
+    // state. Without this, a socket closing late fires onclose after its
+    // replacement is already connected, sets open = false, and leaves the lobby
+    // stuck on "Connecting..." while a perfectly good connection sits unused.
+    sock.onopen = () => {
+      if (ws !== sock) return;
+      open = true; retries = 0;
+      emit('status');
+    };
+    sock.onmessage = e => {
+      if (ws !== sock) return;
+      handle(typeof e.data === 'string' ? e.data : '');
+    };
+    sock.onclose = () => {
+      if (ws !== sock) return;
       open = false; ws = null;
       emit('status');
-      // A dropped socket mid-drive is the most confusing way for this to fail,
-      // so it retries quietly a few times before admitting defeat.
-      if (wantOpen && retries < 5) { retries++; retryTimer = 0.6 * retries; }
+      scheduleRetry();
     };
-    ws.onerror = () => { try { ws.close(); } catch {} };
+    sock.onerror = () => { try { sock.close(); } catch {} };
     return true;
+  }
+
+  function closeSocket() {
+    if (!ws) return;
+    const old = ws;
+    ws = null; open = false;
+    old.onopen = old.onmessage = old.onclose = old.onerror = null;
+    try { old.close(); } catch {}
+  }
+
+  // Reconnection runs on its own timer rather than out of the render loop. The
+  // loop only turns while you are driving, so a connection dropped in the lobby
+  // used to sit there for ever with nothing to revive it.
+  function scheduleRetry() {
+    clearTimeout(retryHandle);
+    if (!wantOpen || retries >= 8) { emit('status'); return; }
+    retries++;
+    retryHandle = setTimeout(() => {
+      if (wantOpen && !ws) connect(code);
+    }, Math.min(600 * retries, 5000));
   }
 
   function leave() {
     wantOpen = false; retries = 0;
+    clearTimeout(retryHandle);
     peers = new Map(); myId = ''; hostId = '';
-    if (ws) { try { ws.close(); } catch {} ws = null; }
-    open = false;
+    closeSocket();
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
     emit('status');
   }
@@ -6821,10 +6864,6 @@ const Net = (() => {
   // Called once per frame while driving: paces our own position updates and
   // handles a reconnect if the socket went away.
   function tick(dt) {
-    if (retryTimer > 0) {
-      retryTimer -= dt;
-      if (retryTimer <= 0 && wantOpen && !ws) connect(code);
-    }
     if (!open) return;
     sendAcc += dt;
     if (sendAcc < SEND_DT) return;
@@ -6840,6 +6879,7 @@ const Net = (() => {
 
   return {
     connect, leave, tick, sendKit, sendMap, isHost,
+    retryNow: () => { retries = 0; if (!ws && wantOpen) connect(code); },
     on: (k, f) => listeners[k].push(f),
     get code() { return code; },
     get open() { return open; },
@@ -6917,7 +6957,7 @@ function renderLobby() {
   } else if (Net.connecting) {
     note = 'Connecting\u2026';
   } else if (!Net.open) {
-    note = 'Lost the connection to the room.';
+    note = 'Lost the connection to the room. Tap here to try again.';
     warn = true;
   } else if (Net.count < 2) {
     note = 'Send the link to a colleague. You can drive now and they will appear when they arrive.';
@@ -6928,6 +6968,14 @@ function renderLobby() {
   lobbyNote.textContent = note;
   lobbyNote.classList.toggle('warn', warn);
 }
+
+// A lost connection retries on its own, but giving up silently after eight goes
+// would leave no way back except reloading the page.
+lobbyNote.addEventListener('click', () => {
+  if (Net.open || Net.connecting || !Net.code) return;
+  Sound.click();
+  Net.retryNow();
+});
 
 Net.on('roster', () => { renderLobby(); updateNetChip(); });
 Net.on('status', () => { renderLobby(); updateNetChip(); });
