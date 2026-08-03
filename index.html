@@ -7495,8 +7495,8 @@ function buildFreeDriveNow() {
 // counts down to, laps that mean something, and a finish settled by the server.
 function startNetRace(race) {
   if (startPending) return;
-  netGrid = Array.isArray(race.grid) ? race.grid : [];
-  netFinish = [];
+  // Same rule as spectating: nothing that a teardown will clear gets set until
+  // after the teardown has run. The race is carried through instead.
   const mapKey = Object.keys(MAPS)[race.map];
   if (mapKey) selMap = mapKey;
   startPending = true;
@@ -7513,7 +7513,11 @@ function startNetRace(race) {
 }
 
 function buildNetRaceNow(race) {
-  endFreeDrive();
+  // Watching when the next race is called is a normal way to arrive here, so
+  // spectating has to be shut down as well as free drive.
+  endFreeDrive(); endSpectate();
+  netGrid = Array.isArray(race.grid) ? race.grid : [];
+  netFinish = [];
   netRace = true;
   lobbyEl.classList.add('hidden');
   menuUI.classList.add('hidden');
@@ -7640,8 +7644,10 @@ function netRaceResults() {
 // then follows that racer without knowing anything has changed.
 function startSpectate(race) {
   if (startPending) return;
-  netGrid = Array.isArray(race.grid) ? race.grid : [];
-  netFinish = [];
+  // The grid is deliberately NOT stored here. Two frames later the build tears
+  // down whatever mode we were in, and that teardown clears it — so setting it
+  // now meant arriving with an empty grid, recognising nobody as a racer, and
+  // concluding the race must have finished. It is passed through instead.
   const mapKey = Object.keys(MAPS)[race.map];
   if (mapKey) selMap = mapKey;
   startPending = true;
@@ -7650,15 +7656,18 @@ function startSpectate(race) {
   if (veil) veil.classList.add('show');
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (!startPending) { if (veil) veil.classList.remove('show'); return; }
-    try { buildSpectateNow(); } finally {
+    try { buildSpectateNow(race); } finally {
       startPending = false;
       if (veil) veil.classList.remove('show');
     }
   }));
 }
 
-function buildSpectateNow() {
+function buildSpectateNow(race) {
   endFreeDrive(); endNetRace();
+  // Only now, once nothing else can clear it.
+  netGrid = Array.isArray(race.grid) ? race.grid : [];
+  netFinish = [];
   netSpectate = true;
   lobbyEl.classList.add('hidden');
   menuUI.classList.add('hidden');
@@ -7827,7 +7836,12 @@ addEventListener('hashchange', () => {
   const m = (location.hash || '').match(/^#r=([A-Za-z0-9]{4,6})$/);
   if (!m) return;
   const code = m[1].toUpperCase();
-  if (Net.code === code && Net.open) return;    // already in this room
+  // Match on the room alone, never on whether the socket has opened yet.
+  // Connecting writes the room into the address bar, which fires this handler
+  // while the socket is still opening. Treating "not open yet" as "wrong room"
+  // tore the new connection down and started another, over and over, so a fresh
+  // room sat on "Connecting..." for ever.
+  if (Net.code === code) return;
   endFreeDrive(); endNetRace(); endSpectate();
   Net.leave();
   Net.connect(code);
