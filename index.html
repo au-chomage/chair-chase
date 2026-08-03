@@ -6760,9 +6760,34 @@ function netSession() { return (freeDrive || netRace) && !!Net.code; }
 function lowDetailWorld() { return MOBILE_GPU && !netSession(); }
 
 // Seconds since the room was created, as agreed by the server. Everyone in the
-// room reads roughly the same number at the same instant, whenever they joined.
+// room reads the same number at the same instant, whenever they joined.
+//
+// The first version anchored this once, off the age in the welcome message. That
+// was wrong by however long the connection took to establish, and the host wears
+// the worst of it: creating a room means waiting for a cold start on Cloudflare,
+// while everyone joining afterwards reaches a room that is already awake. The
+// host's clock ended up several hundred milliseconds behind, and since the
+// countdown is worked out from this, their lights ran late.
+//
+// Now it is measured properly. The client sends its own timestamp, the server
+// bounces it back beside the room's age, and half the round trip accounts for
+// the flight time. Several samples are taken and the one that travelled fastest
+// wins, because a fast round trip is the one least distorted by queueing.
 let roomEpoch = 0;
-function roomClock() { return roomEpoch ? (performance.now() / 1000 - roomEpoch) : elapsed; }
+let roomEpochSet = false;      // an explicit flag: the offset itself can be zero
+let roomEpochRtt = Infinity;
+function roomClock() { return roomEpochSet ? (performance.now() / 1000 - roomEpoch) : elapsed; }
+
+function applyClockSample(sentAt, serverAgeMs) {
+  const now = performance.now();
+  const rtt = now - sentAt;
+  if (rtt > 2000) return;                       // something stalled; useless sample
+  if (rtt >= roomEpochRtt) return;              // we already have a better one
+  roomEpochRtt = rtt;
+  // The server read that age half a round trip ago.
+  roomEpoch = now / 1000 - (serverAgeMs + rtt / 2) / 1000;
+  roomEpochSet = true;
+}
 
 // ---------- name tags ----------
 // Remote chairs need to be identifiable from across a warehouse, so the tag
@@ -6959,9 +6984,14 @@ const Net = (() => {
     let d; try { d = JSON.parse(msg); } catch { return; }
     if (d.t === 'welcome') {
       myId = d.you.id; hostId = d.host; retries = 0;
-      // Anchor the shared clock: room age at this instant, minus the local time
-      // now, gives a local reference everyone in the room agrees on.
-      if (typeof d.age === 'number') roomEpoch = performance.now() / 1000 - d.age / 1000;
+      // A rough anchor immediately so nothing is left without a clock, then
+      // proper samples refine it over the next second.
+      if (typeof d.age === 'number' && !roomEpochSet) {
+        roomEpoch = performance.now() / 1000 - d.age / 1000;
+        roomEpochSet = true;
+        roomEpochRtt = Infinity;
+      }
+      syncClock();
       peers = new Map();
       d.peers.forEach(p => peers.set(p.id, decodeKit(p)));
       const mapKey = Object.keys(MAPS)[d.map];
@@ -7010,7 +7040,12 @@ const Net = (() => {
     } else if (d.t === 'map') {
       const mapKey = Object.keys(MAPS)[d.map];
       if (mapKey && !isHost()) { selMap = mapKey; emit('map'); }
+    } else if (d.t === 'sync') {
+      applyClockSample(d.c, d.age);
     } else if (d.t === 'race') {
+      // Six seconds of countdown is plenty of time to sharpen the clock, and the
+      // countdown is the one thing that has to line up exactly.
+      syncClock();
       startNetRace(d.race);
     } else if (d.t === 'fin') {
       recordNetFinish(d.f);
@@ -7096,6 +7131,18 @@ const Net = (() => {
     t: 'kit', chair: Object.keys(CHAIRS).indexOf(selChair), char: Object.keys(CHARACTERS).indexOf(selChar)
   }));
   const sendMap = () => { if (isHost()) send(JSON.stringify({ t: 'map', map: Object.keys(MAPS).indexOf(selMap) })); };
+  // A burst of samples rather than one: the fastest round trip of five is a far
+  // better estimate than whichever single one happened to be taken.
+  function syncClock(n) {
+    let left = n || 5;
+    const fire = () => {
+      if (!open || left-- <= 0) return;
+      send(JSON.stringify({ t: 'sync', c: performance.now() }));
+      setTimeout(fire, 220);
+    };
+    fire();
+  }
+
   const sendRace = () => { if (isHost()) send(JSON.stringify({ t: 'race', map: Object.keys(MAPS).indexOf(selMap) })); };
   const sendFinish = (total, best) => send(JSON.stringify({ t: 'fin', total, best }));
   const sendEndRace = () => { if (isHost()) send(JSON.stringify({ t: 'endrace' })); };
