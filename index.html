@@ -772,7 +772,8 @@
   <ol class="lobbyList" id="lobbyList"></ol>
   <p class="lobbyNote" id="lobbyNote"></p>
   <div id="lobbyBtns">
-    <button class="go" id="lobbyDriveBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Drive</button>
+    <button class="go" id="lobbyRaceBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M4 3 H20 V7 H4 Z M4 3 V21" stroke="currentColor" stroke-width="2.2" fill="none"/><rect x="4" y="3" width="4" height="2" fill="currentColor"/><rect x="12" y="3" width="4" height="2" fill="currentColor"/><rect x="8" y="5" width="4" height="2" fill="currentColor"/><rect x="16" y="5" width="4" height="2" fill="currentColor"/></svg></span>Race</button>
+    <button class="go alt" id="lobbyDriveBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Drive</button>
     <button class="go alt" id="lobbyKitBtn">Change chair</button>
     <button class="go alt" id="lobbyLeaveBtn">Leave</button>
   </div>
@@ -2133,6 +2134,13 @@ let selChair = 'gaming', selChar = 'manager', selMap = 'office';
 // no positions and no AI. Everything that only makes sense inside a race checks
 // this rather than being torn out.
 let freeDrive = false;
+// A networked race. Shares the shared-world machinery with free drive, but has a
+// countdown, laps, standings and a finish, and no AI rivals — three chairs
+// simulated independently on each machine would be in three different places
+// within seconds.
+let netRace = false;
+let netGrid = [];        // player ids in grid order, decided by the server
+let netFinish = [];      // finishes as the server settles them
 // The selection menu is reused by the lobby, which only wants chair and
 // character. Set while that flow is running so the menu knows where to go back to.
 let netFlow = false;
@@ -4695,6 +4703,7 @@ function startRace() {
 
 function buildRaceNow() {
   endFreeDrive();
+  endNetRace();
   menuUI.classList.add('hidden');
   buildScene(selMap);
   racers = [];
@@ -5347,7 +5356,14 @@ function updateRacer(r, dt, controlsOn) {
       r.lapStart = raceT;
       r.lap++;
       if (r.lap >= LAPS && !r.finished && !freeDrive) {
-        r.finished = true; r.totalTime = raceT; finishOrder.push(r); r.place = finishOrder.length;
+        r.finished = true; r.totalTime = raceT;
+        if (netRace && r.isPlayer) {
+          // Place is not ours to decide. We only know when packets happened to
+          // arrive; the server sees everyone.
+          Net.sendFinish(r.totalTime, r.bestLap || 0);
+        } else {
+          finishOrder.push(r); r.place = finishOrder.length;
+        }
         if (r.isPlayer) {
           finishFxT = FINISH_FX; camKick = Math.max(camKick, 0.05); Sound.go();
           // A win gets the full reaction; anything else gets a politer one, which
@@ -6339,7 +6355,12 @@ document.getElementById('resumeBtn').onclick = () => { Sound.click(); resumeGame
 document.getElementById('restartBtn').onclick = () => {
   Sound.click(); bankRun(); paused = false;
   document.getElementById('pause').classList.add('hidden');
-  if (freeDrive) { endFreeDrive(); showLobby(); } else startRace();
+  if (freeDrive || netRace) {
+    // Quitting a race you are in should drop you back to the room, and if you
+    // are the host it should release everyone else too.
+    if (netRace && Net.isHost()) Net.sendEndRace();
+    endFreeDrive(); endNetRace(); showLobby();
+  } else startRace();
 };
 document.getElementById('menuBtn').onclick = () => { Sound.click(); bankRun(); running = false; showTitle(); };
 
@@ -6348,6 +6369,7 @@ function showTitle() {
   mode = 'title'; running = false; paused = false; resumeT = 0;
   netFlow = false;
   endFreeDrive();
+  endNetRace();
   Net.leave();
   document.getElementById('lobby').classList.add('hidden');
   // The title screen renders the same 3D scene as the selection menu, so the
@@ -6620,7 +6642,13 @@ document.getElementById('startBtn').onclick = () => {
   Leaderboard.setName(cleanName(nameInput.value));
   openMenu(0);
 };
-document.getElementById('againBtn').onclick = () => { Sound.click(); startRace(); };
+document.getElementById('againBtn').onclick = () => {
+  Sound.click();
+  // After a race against people, "again" means back to the room so the host can
+  // start another one — not straight into a solo race against three bots.
+  if (netRace) { endNetRace(); showLobby(); return; }
+  startRace();
+};
 document.getElementById('resultMenuBtn').onclick = () => { Sound.click(); showTitle(); };
 
 // audio: unlock on first interaction, mute toggle
@@ -6712,7 +6740,7 @@ let eventRnd = Math.random;
 
 // True while this session's world is shared with other people, and so must be
 // generated deterministically rather than freshly at random.
-function netSession() { return freeDrive && !!Net.code; }
+function netSession() { return (freeDrive || netRace) && !!Net.code; }
 
 // Device settings may change how the world is drawn. They must never change what
 // is in it.
@@ -6781,9 +6809,9 @@ function makeRemoteRacer(peer, slot) {
   return r;
 }
 
-function addRemote(peer) {
+function addRemote(peer, slot) {
   if (!scene || !racers || racers.some(r => r.netId === peer.id)) return;
-  racers.push(makeRemoteRacer(peer, racers.length));
+  racers.push(makeRemoteRacer(peer, slot === undefined ? racers.length : slot));
   buildLiveOrder();
 }
 
@@ -6856,7 +6884,6 @@ function updateRemote(r, dt) {
   r.heading = ry;
   r.dir = ry;
   r.boostT = boosting ? 0.2 : 0;
-  r.progress = 0;
 
   r.mesh.position.set(px, py, pz);
   r.mesh.rotation.y = ry;
@@ -6911,6 +6938,9 @@ const Net = (() => {
         t: performance.now() / 1000,
         x: +f[2], y: +f[3], z: +f[4], ry: +f[5], sp: +f[6], f: +f[7] | 0
       });
+      // Standings read these directly rather than through the position buffer:
+      // being a tenth of a second behind on a lap counter would show.
+      if (f.length > 8) { r.lap = +f[8] | 0; r.progress = +f[9] || 0; }
       if (r.buf.length > 20) r.buf.shift();
       return;
     }
@@ -6929,6 +6959,9 @@ const Net = (() => {
       emit('roster');
       emit('status');
       if (freeDrive) peers.forEach(p => addRemote(p));
+      // Arriving while a race is on. For now that means waiting it out in the
+      // lobby; watching it is the next piece of work.
+      if (d.race && !netRace && !freeDrive) emit('status');
     } else if (d.t === 'join') {
       peers.set(d.p.id, decodeKit(d.p));
       if (freeDrive) addRemote(peers.get(d.p.id));
@@ -6957,6 +6990,12 @@ const Net = (() => {
     } else if (d.t === 'map') {
       const mapKey = Object.keys(MAPS)[d.map];
       if (mapKey && !isHost()) { selMap = mapKey; emit('map'); }
+    } else if (d.t === 'race') {
+      startNetRace(d.race);
+    } else if (d.t === 'fin') {
+      recordNetFinish(d.f);
+    } else if (d.t === 'endrace') {
+      if (netRace) { endNetRace(); showLobby(); }
     }
   }
 
@@ -7037,6 +7076,9 @@ const Net = (() => {
     t: 'kit', chair: Object.keys(CHAIRS).indexOf(selChair), char: Object.keys(CHARACTERS).indexOf(selChar)
   }));
   const sendMap = () => { if (isHost()) send(JSON.stringify({ t: 'map', map: Object.keys(MAPS).indexOf(selMap) })); };
+  const sendRace = () => { if (isHost()) send(JSON.stringify({ t: 'race', map: Object.keys(MAPS).indexOf(selMap) })); };
+  const sendFinish = (total, best) => send(JSON.stringify({ t: 'fin', total, best }));
+  const sendEndRace = () => { if (isHost()) send(JSON.stringify({ t: 'endrace' })); };
 
   // Called once per frame while driving: paces our own position updates and
   // handles a reconnect if the socket went away.
@@ -7049,15 +7091,21 @@ const Net = (() => {
     if (!p) return;
     const f = ((p.boostT > 0 || p.driftBoostT > 0) ? 1 : 0)
             | (p.driftActive ? 2 : 0)
-            | (p.abilityT > 0 ? 4 : 0);
+            | (p.abilityT > 0 ? 4 : 0)
+            | (p.finished ? 8 : 0);
     // Two decimals is ~2cm at this scale, well under what anyone can see, and it
     // keeps a frame down to around forty bytes.
+    // Lap and progress ride along during a race. Standings are then worked out
+    // on each machine from what everyone reports, rather than needing the server
+    // to understand the track.
     send('s|' + p.pos.x.toFixed(2) + '|' + p.mesh.position.y.toFixed(2) + '|' + p.pos.z.toFixed(2) +
-         '|' + p.heading.toFixed(3) + '|' + p.speed.toFixed(1) + '|' + f);
+         '|' + p.heading.toFixed(3) + '|' + p.speed.toFixed(1) + '|' + f +
+         '|' + (p.lap | 0) + '|' + (p.progress || 0).toFixed(1));
   }
 
   return {
-    connect, leave, tick, sendKit, sendMap, isHost,
+    connect, leave, tick, sendKit, sendMap, sendRace, sendFinish, sendEndRace, isHost,
+    get myId() { return myId; },
     retryNow: () => { retries = 0; if (!ws && wantOpen) connect(code); },
     on: (k, f) => listeners[k].push(f),
     get code() { return code; },
@@ -7078,6 +7126,7 @@ function showLobby() {
   running = false;
   startPending = false;   // cancels a scene build queued a frame or two ago
   endFreeDrive();
+  endNetRace();
   Sound.setMode('menu'); Sound.duck(false);
   document.getElementById('muteBtn').style.display = 'block';
   document.getElementById('start').classList.add('hidden');
@@ -7113,6 +7162,13 @@ function renderLobby() {
     b.style.cursor = host ? 'pointer' : 'default';
   });
 
+  const raceBtn = document.getElementById('lobbyRaceBtn');
+  const canRace = host && Net.count >= 2;
+  raceBtn.style.opacity = canRace ? '1' : '.42';
+  raceBtn.style.cursor = canRace ? 'pointer' : 'default';
+  raceBtn.title = host ? (Net.count >= 2 ? '' : 'Waiting for someone to join')
+                       : 'Only the host can start a race';
+
   const list = document.getElementById('lobbyList');
   list.innerHTML = '';
   const rows = [{ id: 'me', name: ensureName(), chairKey: selChair, charKey: selChar, me: true }]
@@ -7140,9 +7196,10 @@ function renderLobby() {
     warn = true;
   } else if (Net.count < 2) {
     note = 'Send the link to a colleague. You can drive now and they will appear when they arrive.';
+  } else if (host) {
+    note = 'You pick the track. Race starts everyone together on a countdown; Drive just opens the track.';
   } else {
-    note = (host ? 'You pick the track. ' : 'The host picks the track. ') +
-           'Press Drive whenever you like \u2014 nobody waits for anybody.';
+    note = 'The host picks the track and starts races. Drive whenever you like \u2014 nobody waits for anybody.';
   }
   lobbyNote.textContent = note;
   lobbyNote.classList.toggle('warn', warn);
@@ -7245,6 +7302,127 @@ function buildFreeDriveNow() {
   clock.getDelta();
 }
 
+// ---------- networked races ----------
+// The same track and the same chairs as free drive, but with a start everyone
+// counts down to, laps that mean something, and a finish settled by the server.
+function startNetRace(race) {
+  if (startPending) return;
+  netGrid = Array.isArray(race.grid) ? race.grid : [];
+  netFinish = [];
+  const mapKey = Object.keys(MAPS)[race.map];
+  if (mapKey) selMap = mapKey;
+  startPending = true;
+  running = false;
+  const veil = document.getElementById('loadVeil');
+  if (veil) veil.classList.add('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!startPending) { if (veil) veil.classList.remove('show'); return; }
+    try { buildNetRaceNow(race); } finally {
+      startPending = false;
+      if (veil) veil.classList.remove('show');
+    }
+  }));
+}
+
+function buildNetRaceNow(race) {
+  endFreeDrive();
+  netRace = true;
+  lobbyEl.classList.add('hidden');
+  menuUI.classList.add('hidden');
+  withSeed(mulberry32(worldSeed(selMap)), () => buildScene(selMap));
+  racers = []; finishOrder = []; particles = [];
+  raceOver = false; finishFxT = 0; crowdHypeT = 0;
+  paused = false; resumeT = 0; finalLapShown = false;
+  elapsed = 0; raceT = 0;
+  raceBanked = true;              // a race against people is not a solo board run
+  mode = 'race'; lastCountShown = -1; lastResumeShown = -1;
+  hudPrevReady = false; hudLastLap = -1; hudLastRank = 0;
+  glitchCd = 0; notifyCd = 0; hitFxT = 0;
+  camInit = false;
+  document.getElementById('pause').classList.add('hidden');
+  document.getElementById('speedFx').classList.remove('on');
+  document.getElementById('abilityFlash').classList.remove('show');
+  document.getElementById('hud').classList.remove('glitch');
+  document.getElementById('hitFx').style.opacity = '0';
+  Sound.setMode('race'); Sound.duck(false);
+  document.getElementById('muteBtn').style.display = 'none';
+  withSeed(mulberry32(worldSeed(selMap) ^ 0x5bf03635), () => setupCrossers());
+  clearPapers();
+
+  // Grid slots come from the server so both machines put everyone in the same
+  // place. Working it out locally from the roster would put you on the front row
+  // of your own screen and the back row of theirs.
+  const slotOf = id => { const i = netGrid.indexOf(id); return i < 0 ? netGrid.length : i; };
+  const me = makeRacer(selChair, CHARACTERS[selChar], true, slotOf(Net.myId), selChar);
+  me.name = ensureName();
+  racers.push(me);
+  playerIdx = 0;
+  Net.peers.forEach(p => addRemote(p, slotOf(p.id)));
+  buildLiveOrder();
+  if (me.upper) me.upper.visible = !povMode;
+
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  posWrapEl.classList.remove('hidden');
+  document.getElementById('lapWrap').classList.remove('hidden');
+  netChip.classList.remove('hidden');
+  updateNetChip();
+  if (isTouch) document.getElementById('touch').classList.add('on');
+  checkOrientation();
+  // Everyone counts down to the same instant on the room clock, so a slower
+  // machine loses build time rather than start time.
+  countdownT = Math.max(0.6, race.at / 1000 - roomClock());
+  hintShown = true;
+  running = true;
+  clock.getDelta();
+}
+
+// A finish as settled by the server. Applies to whoever it belongs to, including
+// us: our own place comes back rather than being assumed.
+function recordNetFinish(f) {
+  if (!f || netFinish.some(x => x.id === f.id)) return;
+  netFinish.push(f);
+  const r = racers && racers.find(x => (x.isPlayer ? Net.myId : x.netId) === f.id);
+  if (r) {
+    r.finished = true;
+    r.place = f.place;
+    r.totalTime = f.total;
+    if (!finishOrder.includes(r)) finishOrder.push(r);
+    if (r.isPlayer) {
+      finishFxT = FINISH_FX; camKick = Math.max(camKick, 0.05); Sound.go();
+      crowdHypeT = 3.2; crowdHypeAmp = f.place === 1 ? 1 : 0.5;
+      Sound.cheer();
+    }
+  }
+  // The race is done when everyone still connected has crossed the line.
+  if (netRace && netFinish.length >= 1 + Net.count - 1 && racers.some(x => x.isPlayer && x.finished)) {
+    netRaceResults();
+  }
+}
+
+// Waiting for a straggler forever is worse than a slightly early results screen,
+// so the first finisher starts a clock on everyone else.
+let netResultT = 0;
+function netRaceResults() {
+  if (!netRace || raceOver) return;
+  raceOver = true;
+  const order = racers.slice().sort((a, b) => {
+    if (a.finished && b.finished) return a.place - b.place;
+    if (a.finished) return -1;
+    if (b.finished) return 1;
+    return (b.lap * 10000 + (b.progress || 0)) - (a.lap * 10000 + (a.progress || 0));
+  });
+  order.forEach((r, i) => { if (!r.place) r.place = i + 1; });
+  setTimeout(() => showResults(order), 900);
+}
+
+function endNetRace() {
+  netRace = false;
+  netGrid = []; netFinish = [];
+  for (const r of [...(racers || [])]) if (r.isRemote) dropRemote(r.netId);
+}
+
 // Leaving free drive has to undo the HUD surgery, or a normal race afterwards
 // comes up with no position and no lap counter.
 function endFreeDrive() {
@@ -7282,6 +7460,11 @@ document.getElementById('lobbyCopy').onclick = async () => {
 
 document.getElementById('lobbyKitBtn').onclick = () => { Sound.click(); netFlow = true; openMenu(0); };
 document.getElementById('lobbyDriveBtn').onclick = () => { Sound.select(); startFreeDrive(); };
+document.getElementById('lobbyRaceBtn').onclick = () => {
+  if (!Net.isHost() || Net.count < 2) return;
+  Sound.select();
+  Net.sendRace();     // the server decides when, and everyone counts down to it
+};
 document.getElementById('lobbyLeaveBtn').onclick = () => {
   Sound.back();
   endFreeDrive();
