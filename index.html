@@ -5671,10 +5671,9 @@ function updateAbilities(dt, active) {
 function racerCollisions() {
   for (let i = 0; i < racers.length; i++) for (let j = i+1; j < racers.length; j++) {
     const a = racers[i], b = racers[j];
-    // Contact between a simulated chair and a relayed one would resolve
-    // differently in each browser and the two would drift apart. Stage 3's
-    // problem; until then remote chairs are ghosts.
-    if (a.isRemote || b.isRemote) continue;
+    // Two relayed chairs are both somebody else's business: neither position is
+    // ours to change, and whichever of them is real will sort it out at home.
+    if (a.isRemote && b.isRemote) continue;
     const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
     const d2 = dx*dx + dz*dz, min = 2.1;
     if (d2 < min*min && d2 > 0.0001) {
@@ -5684,11 +5683,22 @@ function racerCollisions() {
       // masses are 1, which reproduces the old even split exactly.
       const ma = abilityMass(a), mb = abilityMass(b), tot = ma + mb;
       const sa = overlap * (mb / tot), sb = overlap * (ma / tot);
-      a.pos.x -= nx*sa; a.pos.z -= nz*sa;
-      b.pos.x += nx*sb; b.pos.z += nz*sb;
+      // This was the thing I said could not be done. It can, as long as each
+      // machine only ever moves its own chair.
+      //
+      // A relayed position is a fact that arrived over the wire; writing to it
+      // would just be overwritten by the next packet, and the two machines would
+      // argue. So we shove our own chair by exactly the share it was owed and
+      // leave theirs alone. The other browser is running this same check and
+      // shoving its own the other way, so the pair separates by the full overlap
+      // between them and neither has touched anything it does not own.
+      if (!b.isRemote) { b.pos.x += nx*sb; b.pos.z += nz*sb; }
+      if (!a.isRemote) { a.pos.x -= nx*sa; a.pos.z -= nz*sa; }
       const aa = abilityOf(a), ab = abilityOf(b);
-      a.speed *= 1 - 0.08 * (1 - ((aa && aa.knock) || 0));
-      b.speed *= 1 - 0.08 * (1 - ((ab && ab.knock) || 0));
+      // Same rule for the speed penalty: only ours to apply. Their speed is
+      // whatever they last told us it was.
+      if (!a.isRemote) a.speed *= 1 - 0.08 * (1 - ((aa && aa.knock) || 0));
+      if (!b.isRemote) b.speed *= 1 - 0.08 * (1 - ((ab && ab.knock) || 0));
       if (ma !== mb) {                                   // a shove worth feeling
         const heavy = ma > mb ? a : b, hv = ma > mb ? aa : ab, tint = (aa || ab).tint;
         const mx = (a.pos.x + b.pos.x) / 2, mz = (a.pos.z + b.pos.z) / 2;
@@ -6945,7 +6955,7 @@ function updateRemote(r, dt) {
 const Net = (() => {
   let ws = null, code = '', myId = '', hostId = '', open = false;
   let peers = new Map();          // id -> {id,name,chair,char}
-  let sendAcc = 0, retries = 0, retryHandle = 0;
+  let sendAcc = 0, retries = 0, retryHandle = 0, netChipT = 0;
   let wantOpen = false;           // did we ask to be connected, or did we leave
   const SEND_DT = 1 / 15;
 
@@ -7020,6 +7030,8 @@ const Net = (() => {
       // Their chair goes with them. Left in, it sits frozen on the track for the
       // rest of the race and still counts towards everyone finishing.
       if (freeDrive || netRace) dropRemote(d.id);
+      // One fewer person to wait for, which may be the last one.
+      if (netRace) checkNetRaceOver();
       emit('roster');
     } else if (d.t === 'kit') {
       const p = peers.get(d.id);
@@ -7151,6 +7163,8 @@ const Net = (() => {
   // handles a reconnect if the socket went away.
   function tick(dt) {
     if (!open) return;
+    netChipT -= dt;
+    if (netChipT <= 0) { netChipT = 0.5; updateNetChip(); }
     sendAcc += dt;
     if (sendAcc < SEND_DT) return;
     sendAcc = 0;
@@ -7288,9 +7302,14 @@ function updateNetChip() {
   if (!freeDrive && !netRace) return;
   netChip.classList.toggle('off', !Net.open);
   netChip.querySelector('.cd').textContent = Net.code;
-  netChip.querySelector('.pc').textContent = Net.open
-    ? (Net.count === 1 ? 'just you' : Net.count + ' driving')
-    : 'reconnecting\u2026';
+  const mine = racers && racers.find(x => x.isPlayer);
+  netChip.querySelector('.pc').textContent =
+    !Net.open ? 'reconnecting\u2026'
+    : (netRace && mine && mine.finished)
+      ? 'finished \u00b7 waiting for ' + Math.max(1, Net.count - netFinish.length) + ' more'
+    : netRace ? Net.count + ' racing'
+    : Net.count === 1 ? 'just you'
+    : Net.count + ' driving';
 }
 
 // ---------- free drive ----------
@@ -7462,18 +7481,31 @@ function recordNetFinish(f) {
       Sound.cheer();
     }
   }
-  // The race is done when everyone still connected has crossed the line.
-  if (netRace && netFinish.length >= 1 + Net.count - 1 && racers.some(x => x.isPlayer && x.finished)) {
-    netRaceResults();
+  // The first person over the line starts a clock on everyone else. Without it,
+  // one person wandering off mid-race leaves the rest staring at a HUD for ever.
+  if (netRace && !netResultTimer) {
+    netResultTimer = setTimeout(netRaceResults, STRAGGLER_WAIT * 1000);
   }
+  checkNetRaceOver();
 }
 
-// Waiting for a straggler forever is worse than a slightly early results screen,
-// so the first finisher starts a clock on everyone else.
-let netResultT = 0;
+// Long enough for a genuine last lap, short enough that nobody is held hostage.
+const STRAGGLER_WAIT = 60;
+let netResultTimer = 0;
+
+// The race is done when everyone still in the room has crossed the line. Called
+// on every finish and again whenever somebody leaves, since leaving lowers the
+// number of people we are waiting for.
+function checkNetRaceOver() {
+  if (!netRace || raceOver) return;
+  const mine = racers.find(x => x.isPlayer);
+  if (!mine || !mine.finished) return;            // never end it before your own race
+  if (netFinish.length >= Net.count) netRaceResults();
+}
 function netRaceResults() {
   if (!netRace || raceOver) return;
   raceOver = true;
+  clearTimeout(netResultTimer); netResultTimer = 0;
   const order = racers.slice().sort((a, b) => {
     if (a.finished && b.finished) return a.place - b.place;
     if (a.finished) return -1;
@@ -7486,6 +7518,7 @@ function netRaceResults() {
 
 function endNetRace() {
   netRace = false;
+  clearTimeout(netResultTimer); netResultTimer = 0;
   netGrid = []; netFinish = [];
   for (const r of [...(racers || [])]) if (r.isRemote) dropRemote(r.netId);
 }
