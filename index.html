@@ -1477,8 +1477,27 @@ function feltTexture(hex) {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
 const _mat = {};
+
+// Every one of these textures is speckled with a few hundred random dots, and
+// every one is built once and then cached forever. That combination was quietly
+// wrecking the shared world.
+//
+// Two machines in the same room agree on the seed, but they do not agree on
+// which textures they had already built before joining — browse four chairs in
+// the menu instead of one, or play a solo race first, and your cache is warmer.
+// A warm cache skips the generation, and skipping it means several hundred fewer
+// draws from the shared sequence. Everything built after that point comes off at
+// a different place, so the offices diverge.
+//
+// Giving each texture its own generator, keyed by its own name, takes them out
+// of the shared sequence entirely. Cache state can now differ freely, and as a
+// bonus the same texture looks the same on both screens.
+function seededTex(key, makeTex) {
+  return withSeed(mulberry32(hashSeed('tex|' + key)), makeTex);
+}
+
 function matWith(key, makeTex) {
-  if (!_mat[key]) _mat[key] = new THREE.MeshLambertMaterial({ map: makeTex() });
+  if (!_mat[key]) _mat[key] = new THREE.MeshLambertMaterial({ map: seededTex(key, makeTex) });
   return _mat[key];
 }
 // Lambert has no specular term, so every surface in the game read as the same matte
@@ -1486,7 +1505,7 @@ function matWith(key, makeTex) {
 // is what distinguishes the material -- metal frames, polished wood, glass. Fabric,
 // felt, cardboard and clay stay Lambert, which is both correct for them and cheaper.
 function matPhong(key, makeTex, opts) {
-  if (!_mat[key]) _mat[key] = new THREE.MeshPhongMaterial(Object.assign({ map: makeTex() }, opts));
+  if (!_mat[key]) _mat[key] = new THREE.MeshPhongMaterial(Object.assign({ map: seededTex(key, makeTex) }, opts));
   return _mat[key];
 }
 const leather   = h => matPhong('lea' + h, () => leatherTexture(h), { specular: 0x2a2a30, shininess: 22 });
@@ -4372,7 +4391,7 @@ function buildScene(mapKey) {
 
   // dense cubicle rows: workers seated at desks lining both sides of the track
   const cubDensity = mapKey === 'warehouse' ? 82 : mapKey === 'startup' ? 58 : 90;
-  const cubStep = Math.max(4, Math.round(WP_COUNT / (cubDensity * (MOBILE_GPU ? 0.5 : 1))));
+  const cubStep = Math.max(4, Math.round(WP_COUNT / (cubDensity * (lowDetailWorld() ? 0.5 : 1))));
   const fillChance = mapKey === 'office' ? 0.88 : mapKey === 'startup' ? 0.58 : (mapKey === 'carpark' || mapKey === 'hq') ? 0 : 0.68;
   for (let i = 3; i < WP_COUNT; i += cubStep) {
     if (turnAt(i, 3) > 0.3) continue; // skip the tightest corners
@@ -4406,7 +4425,7 @@ function buildScene(mapKey) {
   const crowdChunkMap = new Map();
   const BEHAVIORS = ['cheer', 'cheer', 'cheer', 'airplane', 'selfie', 'coffee', 'sign', 'boo'];
   const crowdDensity = mapKey === 'startup' ? 74 : 115;
-  const crowdStep = (mapKey === 'carpark' || mapKey === 'hq') ? (MOBILE_GPU ? 52 : 26) : Math.max(3, Math.round(WP_COUNT / (MOBILE_GPU ? 55 : crowdDensity)));
+  const crowdStep = (mapKey === 'carpark' || mapKey === 'hq') ? (lowDetailWorld() ? 52 : 26) : Math.max(3, Math.round(WP_COUNT / (lowDetailWorld() ? 55 : crowdDensity)));
   const ANIM_PART_KEYS = ['plane', 'cup', 'splash', 'flash', 'sign'];
   for (let i = 2; i < WP_COUNT; i += crowdStep) {
     for (const side of [-1, 1]) {
@@ -4871,7 +4890,15 @@ const CROSS_CD = () => selMap === 'hq' ? 2.5 + Math.random() * 5 : 6 + Math.rand
 function armCrosser(c, k) {
   if (!netSession()) { c.rnd = Math.random; c.nextAt = Infinity; return c; }
   c.rnd = mulberry32((worldSeed(selMap) ^ 0x27d4eb2f) + k * 2654435761);
-  c.nextAt = roomClock() + (c.jan ? 2 + c.rnd() * 8 : (selMap === 'hq' ? 1 + c.rnd() * 4 : 3 + c.rnd() * 6));
+  // Measured from when the room was created, not from when you pressed Drive.
+  // Anchoring to now was the remaining bug: you two press it minutes apart, so
+  // "three seconds from now" meant two different moments.
+  c.nextAt = c.jan ? 2 + c.rnd() * 8 : (selMap === 'hq' ? 1 + c.rnd() * 4 : 3 + c.rnd() * 6);
+  // Wind forward past the crossings that happened before you arrived. Both of you
+  // then hold the same diary; you just opened it at different pages.
+  const now = roomClock();
+  let guard = 0;
+  while (c.nextAt < now && guard++ < 20000) rearmCrosser(c);
   return c;
 }
 
@@ -6686,6 +6713,18 @@ let eventRnd = Math.random;
 // True while this session's world is shared with other people, and so must be
 // generated deterministically rather than freshly at random.
 function netSession() { return freeDrive && !!Net.code; }
+
+// Device settings may change how the world is drawn. They must never change what
+// is in it.
+//
+// A phone was building half the cubicles and half the spectators. Same seed, but
+// a different number of draws from it, so everything generated after the first
+// skipped desk came off the stream at a different point — which is why the
+// offices still did not match. It was also quietly unfair: cubicles are solid,
+// so the phone was driving a different track.
+//
+// Pixel ratio, antialiasing and shadows stay device-specific. Those are drawing.
+function lowDetailWorld() { return MOBILE_GPU && !netSession(); }
 
 // Seconds since the room was created, as agreed by the server. Everyone in the
 // room reads roughly the same number at the same instant, whenever they joined.
