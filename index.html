@@ -6098,7 +6098,11 @@ function animate() {
     // a fact that arrived over the wire, not something to work out from inputs,
     // so it never enters the physics.
     for (const r of racers) r.isRemote ? updateRemote(r, dt) : updateRacer(r, dt, controlsOn);
-    if (freeDrive) Net.tick(dt);
+    // Races need this every bit as much as free drive does. Gating it on
+    // freeDrive alone meant nobody sent a single position frame during a race:
+    // everyone sat frozen on the grid on everyone else's screen, and with no lap
+    // or progress arriving, both players read themselves as leading.
+    if (freeDrive || netRace) Net.tick(dt);
     updateAbilities(dt, active);
     racerCollisions();
     updateParticles(dt);
@@ -6422,9 +6426,10 @@ function cleanName(raw) {
 // or bailed out on lap two. Guarded so a race can only ever bank once.
 let raceBanked = false;
 function bankRun(useBeacon) {
-  // Free drive has no laps, no finish and no bounded distance. Nothing about it
-  // belongs on a board that ranks races.
-  if (freeDrive) return;
+  // Free drive has no laps, no finish and no bounded distance. A race against
+  // people is a different contest from a race against three bots. Neither
+  // belongs on a board that ranks the latter.
+  if (freeDrive || netRace) return;
   if (raceBanked || !racers.length) return;
   const p = racers[playerIdx];
   if (!p) return;
@@ -6798,7 +6803,12 @@ const REMOTE_DELAY = 0.10;
 function makeRemoteRacer(peer, slot) {
   const chairKey = CHAIRS[peer.chairKey] ? peer.chairKey : 'ergo';
   const charKey = CHARACTERS[peer.charKey] ? peer.charKey : 'manager';
-  const r = makeRacer(chairKey, CHARACTERS[charKey], false, slot + 1, charKey);
+  // The slot arrives ready to use. It used to have one added here, which was
+  // harmless while remotes were only ever appended after the local player, and
+  // wrong the moment the server started handing out explicit grid positions: the
+  // second player's own chair and the first player's remote chair both landed on
+  // slot 1, one inside the other.
+  const r = makeRacer(chairKey, CHARACTERS[charKey], false, slot, charKey);
   r.ai = null;
   r.isRemote = true;
   r.netId = peer.id;
@@ -6811,6 +6821,8 @@ function makeRemoteRacer(peer, slot) {
 
 function addRemote(peer, slot) {
   if (!scene || !racers || racers.some(r => r.netId === peer.id)) return;
+  // Free drive has no grid, so arrivals just take the next slot along. In a race
+  // the caller passes the position the server decided on.
   racers.push(makeRemoteRacer(peer, slot === undefined ? racers.length : slot));
   buildLiveOrder();
 }
@@ -6959,6 +6971,12 @@ const Net = (() => {
       emit('roster');
       emit('status');
       if (freeDrive) peers.forEach(p => addRemote(p));
+      // Reconnecting mid-race: put everyone back on the grid slot they started
+      // from, or the chairs pile up at the back.
+      else if (netRace) peers.forEach(p => {
+        const i = netGrid.indexOf(p.id);
+        addRemote(p, i < 0 ? racers.length : i);
+      });
       // Arriving while a race is on. For now that means waiting it out in the
       // lobby; watching it is the next piece of work.
       if (d.race && !netRace && !freeDrive) emit('status');
@@ -6969,7 +6987,9 @@ const Net = (() => {
     } else if (d.t === 'leave') {
       peers.delete(d.id);
       hostId = d.host || hostId;
-      if (freeDrive) dropRemote(d.id);
+      // Their chair goes with them. Left in, it sits frozen on the track for the
+      // rest of the race and still counts towards everyone finishing.
+      if (freeDrive || netRace) dropRemote(d.id);
       emit('roster');
     } else if (d.t === 'kit') {
       const p = peers.get(d.id);
@@ -6979,7 +6999,7 @@ const Net = (() => {
         // mesh mid-drive was risky. It is not: a remote chair is not the one you
         // are sitting in, and leaving it stale meant someone changed their chair
         // and everyone else carried on seeing the old one.
-        if (freeDrive) rekitRemote(p);
+        if (freeDrive || netRace) rekitRemote(p);
         emit('roster');
       }
     } else if (d.t === 'roster') {
@@ -7218,7 +7238,7 @@ Net.on('status', () => { renderLobby(); updateNetChip(); });
 Net.on('map', () => { if (!lobbyEl.classList.contains('hidden')) renderLobby(); });
 
 function updateNetChip() {
-  if (!freeDrive) return;
+  if (!freeDrive && !netRace) return;
   netChip.classList.toggle('off', !Net.open);
   netChip.querySelector('.cd').textContent = Net.code;
   netChip.querySelector('.pc').textContent = Net.open
