@@ -4839,8 +4839,8 @@ function setupCrossers() {
     mesh.traverse(o => { if (o.isMesh) o.castShadow = false; });
     mesh.visible = false;
     scene.add(mesh);
-    crossers.push({ mesh, active: false, knocked: false, jan: false, phase: 'cross',
-      cd: selMap === 'hq' ? 1 + Math.random() * 4 : 3 + Math.random() * 6, i: 0, side: 1, off: 0, speed: 0, kt: 0, vel: null });
+    crossers.push(armCrosser({ mesh, active: false, knocked: false, jan: false, phase: 'cross',
+      cd: selMap === 'hq' ? 1 + Math.random() * 4 : 3 + Math.random() * 6, i: 0, side: 1, off: 0, speed: 0, kt: 0, vel: null }, k));
   }
   // Janitors work the floor whatever the venue, so every map gets them. They
   // spend most of their time sweeping at the edge and only occasionally step out,
@@ -4852,13 +4852,39 @@ function setupCrossers() {
     mesh.traverse(o => { if (o.isMesh) o.castShadow = false; });
     mesh.visible = false;
     scene.add(mesh);
-    crossers.push({ mesh, active: false, knocked: false, jan: true, phase: 'sweep',
+    crossers.push(armCrosser({ mesh, active: false, knocked: false, jan: true, phase: 'sweep',
       cd: 2 + Math.random() * 8, i: 0, side: 1, off: 0, speed: 0, kt: 0, vel: null,
-      sweepT: 0, swing: Math.random() * 6.28 });
+      sweepT: 0, swing: Math.random() * 6.28 }, 100 + k));
   }
 }
 const CROSS_START = TRACK_HALF + 4.5;
 const CROSS_CD = () => selMap === 'hq' ? 2.5 + Math.random() * 5 : 6 + Math.random() * 10;
+
+// Crossers were the last thing still rolling dice every frame on each machine
+// independently, which is why one of you would watch someone walk out in front
+// of them while the other saw an empty aisle.
+//
+// Each one now carries its own generator and its own diary of absolute times,
+// read off the shared room clock. Own generator because they interleave with
+// every other random call in the frame; absolute times because a countdown
+// started when you pressed Drive, and you two press it at different moments.
+function armCrosser(c, k) {
+  if (!netSession()) { c.rnd = Math.random; c.nextAt = Infinity; return c; }
+  c.rnd = mulberry32((worldSeed(selMap) ^ 0x27d4eb2f) + k * 2654435761);
+  c.nextAt = roomClock() + (c.jan ? 2 + c.rnd() * 8 : (selMap === 'hq' ? 1 + c.rnd() * 4 : 3 + c.rnd() * 6));
+  return c;
+}
+
+// Rearmed the moment it sets off rather than when it arrives, so the schedule
+// stays a pure function of the seed and never inherits a difference in how long
+// the walk happened to take on one machine.
+const CROSS_SPAN = 14;
+function rearmCrosser(c) {
+  const gap = c.jan ? 7 + c.rnd() * 9
+            : (selMap === 'hq' ? 2.5 + c.rnd() * 5 : 6 + c.rnd() * 10);
+  if (netSession()) c.nextAt += CROSS_SPAN + gap;
+  else c.cd = gap;
+}
 function spawnCrosser(c) {
   c.i = Math.floor(Math.random() * WP_COUNT);
   c.side = Math.random() < 0.5 ? 1 : -1;
@@ -4906,11 +4932,19 @@ function updateCrossers(dt) {
         c.mesh.rotation.set(0, 0, 0);
         const mop = c.mesh.userData.mop;
         if (mop) mop.rotation.set(0, 0, 0);
-        c.cd = c.jan ? 7 + Math.random() * 9 : CROSS_CD();
+        if (!netSession()) c.cd = c.jan ? 7 + Math.random() * 9 : CROSS_CD();
       }
       continue;
     }
-    if (!c.active) { c.cd -= dt; if (c.cd <= 0) spawnCrosser(c); continue; }
+    if (!c.active) {
+      if (netSession()) {
+        if (roomClock() >= c.nextAt) { rearmCrosser(c); withSeed(c.rnd, () => spawnCrosser(c)); }
+      } else {
+        c.cd -= dt;
+        if (c.cd <= 0) spawnCrosser(c);
+      }
+      continue;
+    }
     if (c.jan && c.phase === 'sweep') { updateJanitorSweep(c, dt); continue; }
     c.off -= c.side * c.speed * dt;
     const n = wpNormal(c.i);
@@ -4926,7 +4960,7 @@ function updateCrossers(dt) {
     }
     if (c.off * c.side <= -CROSS_START) { // reached the far side
       c.active = false; c.mesh.visible = false;
-      c.cd = c.jan ? 7 + Math.random() * 9 : CROSS_CD();
+      if (!netSession()) c.cd = c.jan ? 7 + Math.random() * 9 : CROSS_CD();
     }
   }
 }
@@ -6714,6 +6748,23 @@ function addRemote(peer) {
   buildLiveOrder();
 }
 
+// Swap a remote rider's chair without losing where they are. The position buffer
+// is carried across, so they keep gliding instead of blinking back to the grid.
+function rekitRemote(peer) {
+  const cur = racers && racers.find(r => r.netId === peer.id);
+  if (!cur) return;
+  const buf = cur.buf, tag = cur.tag;
+  // Detach and disown the tag first. dropRemote disposes whatever tag it finds,
+  // and this one is being carried over to the new chair.
+  if (tag) { cur.mesh.remove(tag); cur.tag = null; }
+  dropRemote(peer.id);
+  addRemote(peer);
+  const next = racers.find(r => r.netId === peer.id);
+  if (!next) return;
+  if (buf && buf.length) next.buf = buf;
+  if (tag) { if (next.tag) next.mesh.remove(next.tag); next.tag = tag; next.mesh.add(tag); }
+}
+
 function dropRemote(id) {
   const i = racers.findIndex(r => r.netId === id);
   if (i < 0) return;
@@ -6852,8 +6903,11 @@ const Net = (() => {
       const p = peers.get(d.id);
       if (p) {
         Object.assign(p, decodeKit({ id: d.id, name: p.name, chair: d.chair, char: d.char }));
-        // Rebuilding a chair mid-drive would mean tearing down a mesh someone is
-        // sitting in. The lobby is where kit changes show, and that is enough.
+        // I had this only updating the lobby list, on the grounds that swapping a
+        // mesh mid-drive was risky. It is not: a remote chair is not the one you
+        // are sitting in, and leaving it stale meant someone changed their chair
+        // and everyone else carried on seeing the old one.
+        if (freeDrive) rekitRemote(p);
         emit('roster');
       }
     } else if (d.t === 'roster') {
