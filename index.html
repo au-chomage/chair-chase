@@ -367,6 +367,21 @@
   #lobbyBtns { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
   #lobbyBtns .go { margin-top:22px; }
 
+  /* Spectator bar. Sits low and central so it reads as an overlay on someone
+     else's race rather than part of your own HUD. */
+  #specBar { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:40;
+    display:flex; align-items:center; gap:14px; padding:10px 16px; background:rgba(12,20,24,.82);
+    border:2px solid rgba(53,182,196,.4); border-left:5px solid #ffd34d; pointer-events:auto; }
+  #specBar .lab { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:#7fa3ab; }
+  #specBar .nm { font-size:17px; font-style:italic; color:#fff; max-width:34vw; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #specBar .of { font-family:Verdana,sans-serif; font-size:12px; color:#8fb3ba; letter-spacing:0; }
+  #specBar button { font:inherit; font-size:11px; letter-spacing:1.4px; text-transform:uppercase;
+    color:#0c1418; background:#35b6c4; border:none; padding:8px 13px; cursor:pointer; transform:skewX(-8deg); }
+  #specBar button:hover { background:#5ccbd7; }
+  #specBar button.ghost { background:#26333a; color:#dfeef1; }
+  @media (max-width:620px){ #specBar { bottom:12px; gap:9px; padding:8px 11px; } #specBar .nm { font-size:14px; } }
+
   /* Free-drive HUD chip: replaces the lap banner, which has nothing to say when
      there are no laps. */
   #netChip { display:flex; align-items:center; gap:10px; padding:7px 16px; background:rgba(14,22,26,.72);
@@ -572,6 +587,11 @@
       <div class="poslabel">POS</div>
       <div id="posNum">1<span class="tot">/4</span></div>
     </div>
+    <div id="specBar" class="hidden">
+      <span class="lab">Watching</span><span class="nm"></span><span class="of"></span>
+      <button type="button" id="specNextBtn">Next</button>
+      <button type="button" class="ghost" id="specLeaveBtn">Leave</button>
+    </div>
     <div id="netChip" class="hidden"><span class="cd"></span><span class="pc"></span></div>
     <div id="lapWrap" class="banner"><div class="inner"><div class="lab">LAP</div><div id="lapNum">1<b>/3</b></div><div id="timeNum" class="lapTime">0:00.00</div></div></div>
   </div>
@@ -772,6 +792,7 @@
   <ol class="lobbyList" id="lobbyList"></ol>
   <p class="lobbyNote" id="lobbyNote"></p>
   <div id="lobbyBtns">
+    <button class="go hidden" id="lobbyWatchBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><path d="M1.6 12 C5 6.4 8.6 4.2 12 4.2 C15.4 4.2 19 6.4 22.4 12 C19 17.6 15.4 19.8 12 19.8 C8.6 19.8 5 17.6 1.6 12 Z" fill="none" stroke="currentColor" stroke-width="2.1"/><circle cx="12" cy="12" r="3.3" fill="currentColor"/></svg></span>Watch race</button>
     <button class="go" id="lobbyRaceBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M4 3 H20 V7 H4 Z M4 3 V21" stroke="currentColor" stroke-width="2.2" fill="none"/><rect x="4" y="3" width="4" height="2" fill="currentColor"/><rect x="12" y="3" width="4" height="2" fill="currentColor"/><rect x="8" y="5" width="4" height="2" fill="currentColor"/><rect x="16" y="5" width="4" height="2" fill="currentColor"/></svg></span>Race</button>
     <button class="go alt" id="lobbyDriveBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.85em" height="0.85em" aria-hidden="true"><path d="M6 4 L20 12 L6 20 Z" fill="currentColor"/></svg></span>Drive</button>
     <button class="go alt" id="lobbyKitBtn">Change chair</button>
@@ -2141,6 +2162,9 @@ let freeDrive = false;
 let netRace = false;
 let netGrid = [];        // player ids in grid order, decided by the server
 let netFinish = [];      // finishes as the server settles them
+// Watching rather than racing: arrived after the lights, so no chair of our own.
+let netSpectate = false;
+let spectateIdx = 0;
 // The selection menu is reused by the lobby, which only wants chair and
 // character. Set while that flow is running so the menu knows where to go back to.
 let netFlow = false;
@@ -4704,6 +4728,7 @@ function startRace() {
 function buildRaceNow() {
   endFreeDrive();
   endNetRace();
+  endSpectate();
   menuUI.classList.add('hidden');
   buildScene(selMap);
   racers = [];
@@ -5898,8 +5923,11 @@ function showResults(order) {
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('touch').classList.remove('on');
   document.getElementById('rotate').classList.remove('show');
+  // A spectator has no chair and therefore no placing. playerIdx is pointing at
+  // whoever they were watching, which is not the same thing at all.
+  const watching = netSpectate;
   const p = racers[playerIdx];
-  const place = p.place;
+  const place = watching ? 0 : p.place;
   Sound.setMode('menu'); Sound.duck(false); Sound.finish(place === 1);
   document.getElementById('muteBtn').style.display = 'block';
   const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
@@ -5908,7 +5936,7 @@ function showResults(order) {
     2: 'So close. One more push next time.',
     3: 'On the podium, just barely.'
   };
-  document.getElementById('resultMedal').textContent = medals[place] || '🏁';
+  document.getElementById('resultMedal').textContent = watching ? '👀' : (medals[place] || '🏁');
   const conf = document.getElementById('confetti'); conf.innerHTML = '';
   if (place === 1) {
     const cols = ['#5ce8f2', '#ffd34d', '#ff7fd0', '#7fff9f', '#f4f2ec'];
@@ -5922,14 +5950,24 @@ function showResults(order) {
     }
     setTimeout(() => { conf.innerHTML = ''; }, 5200);
   }
-  const bestLap = p.bestLap, total = p.totalTime || raceT;
-  document.getElementById('resultTimes').innerHTML =
-    'Best lap <b>' + fmtTime(bestLap) + '</b> &nbsp;\u00b7&nbsp; Total ' + fmtTime(total) +
-    ' &nbsp;\u00b7&nbsp; Distance <b>' + fmtDist(p.dist) + '</b>' +
-    ' &nbsp;\u00b7&nbsp; HR complaints <b>' + (p.hr || 0) + '</b>';
+  if (watching) {
+    const won = order[0];
+    document.getElementById('resultTimes').innerHTML =
+      won ? 'Winning time <b>' + fmtTime(won.totalTime || raceT) + '</b>' : '';
+  } else {
+    const bestLap = p.bestLap, total = p.totalTime || raceT;
+    document.getElementById('resultTimes').innerHTML =
+      'Best lap <b>' + fmtTime(bestLap) + '</b> &nbsp;\u00b7&nbsp; Total ' + fmtTime(total) +
+      ' &nbsp;\u00b7&nbsp; Distance <b>' + fmtDist(p.dist) + '</b>' +
+      ' &nbsp;\u00b7&nbsp; HR complaints <b>' + (p.hr || 0) + '</b>';
+  }
   bankRun();
-  document.getElementById('resultTitle').textContent = place === 1 ? 'You win!' : ORD_TXT(place) + ' place';
-  document.getElementById('resultSub').textContent = subs[place] || 'Back of the pack. Regroup and go again.';
+  document.getElementById('resultTitle').textContent =
+    watching ? ((order[0] && order[0].name) ? order[0].name + ' wins' : 'Race over')
+             : (place === 1 ? 'You win!' : ORD_TXT(place) + ' place');
+  document.getElementById('resultSub').textContent =
+    watching ? 'You were watching this one. Next race, take a chair.'
+             : (subs[place] || 'Back of the pack. Regroup and go again.');
   const ol = document.getElementById('standings');
   ol.innerHTML = '';
   order.forEach((r, i) => {
@@ -6112,7 +6150,7 @@ function animate() {
     // freeDrive alone meant nobody sent a single position frame during a race:
     // everyone sat frozen on the grid on everyone else's screen, and with no lap
     // or progress arriving, both players read themselves as leading.
-    if (freeDrive || netRace) Net.tick(dt);
+    if (freeDrive || netRace || netSpectate) Net.tick(dt);
     updateAbilities(dt, active);
     racerCollisions();
     updateParticles(dt);
@@ -6222,6 +6260,14 @@ const isTypingTarget = e => {
 
 addEventListener('keydown', e => {
   if (isTypingTarget(e)) return;
+  // Watching: the only controls that mean anything are which chair to watch.
+  if (netSpectate && mode === 'race') {
+    if (e.code === 'Tab' || e.code === 'Space' || e.code === 'ArrowRight' || e.code === 'KeyD') {
+      spectateNext(1); e.preventDefault(); return;
+    }
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { spectateNext(-1); e.preventDefault(); return; }
+    if (e.code === 'Escape') { endSpectate(); showLobby(); e.preventDefault(); return; }
+  }
   if (e.code === 'KeyF' && mode === 'race') { setPov(!povMode); e.preventDefault(); return; }
   if (e.code === 'Escape') {
     // Both of these live over the title screen and previously trapped you until
@@ -6234,6 +6280,8 @@ addEventListener('keydown', e => {
       document.getElementById('boardBackBtn').click(); e.preventDefault(); return;
     }
     if (mode === 'menu') { document.getElementById('backBtn').click(); e.preventDefault(); return; }
+    // Nothing to pause when it is not your race.
+    if (netSpectate) { e.preventDefault(); return; }
     if (mode === 'race' && running && !raceOver) { paused ? resumeGame() : pauseGame(); e.preventDefault(); return; }
   }
   if (mode === 'menu') {
@@ -6369,11 +6417,11 @@ document.getElementById('resumeBtn').onclick = () => { Sound.click(); resumeGame
 document.getElementById('restartBtn').onclick = () => {
   Sound.click(); bankRun(); paused = false;
   document.getElementById('pause').classList.add('hidden');
-  if (freeDrive || netRace) {
-    // Quitting a race you are in should drop you back to the room, and if you
-    // are the host it should release everyone else too.
-    if (netRace && Net.isHost()) Net.sendEndRace();
-    endFreeDrive(); endNetRace(); showLobby();
+  if (freeDrive || netRace || netSpectate) {
+    // Bowing out is a personal decision. It used to tell the whole room the race
+    // was over if you happened to be the host, which ended everyone else's race
+    // from under them and left nothing to come back and watch.
+    endFreeDrive(); endNetRace(); endSpectate(); showLobby();
   } else startRace();
 };
 document.getElementById('menuBtn').onclick = () => { Sound.click(); bankRun(); running = false; showTitle(); };
@@ -6384,6 +6432,7 @@ function showTitle() {
   netFlow = false;
   endFreeDrive();
   endNetRace();
+  endSpectate();
   Net.leave();
   document.getElementById('lobby').classList.add('hidden');
   // The title screen renders the same 3D scene as the selection menu, so the
@@ -6437,9 +6486,10 @@ function cleanName(raw) {
 let raceBanked = false;
 function bankRun(useBeacon) {
   // Free drive has no laps, no finish and no bounded distance. A race against
-  // people is a different contest from a race against three bots. Neither
-  // belongs on a board that ranks the latter.
-  if (freeDrive || netRace) return;
+  // people is a different contest from a race against three bots. And a
+  // spectator did not drive at all. None of it belongs on a board that ranks
+  // solo runs.
+  if (freeDrive || netRace || netSpectate) return;
   if (raceBanked || !racers.length) return;
   const p = racers[playerIdx];
   if (!p) return;
@@ -6662,6 +6712,7 @@ document.getElementById('againBtn').onclick = () => {
   // After a race against people, "again" means back to the room so the host can
   // start another one — not straight into a solo race against three bots.
   if (netRace) { endNetRace(); showLobby(); return; }
+  if (netSpectate) { endSpectate(); showLobby(); return; }
   startRace();
 };
 document.getElementById('resultMenuBtn').onclick = () => { Sound.click(); showTitle(); };
@@ -6755,7 +6806,7 @@ let eventRnd = Math.random;
 
 // True while this session's world is shared with other people, and so must be
 // generated deterministically rather than freshly at random.
-function netSession() { return (freeDrive || netRace) && !!Net.code; }
+function netSession() { return (freeDrive || netRace || netSpectate) && !!Net.code; }
 
 // Device settings may change how the world is drawn. They must never change what
 // is in it.
@@ -6886,7 +6937,15 @@ function dropRemote(id) {
   if (r.tag) { r.mesh.remove(r.tag); r.tag.material.dispose(); }
   scene.remove(r.mesh);
   racers.splice(i, 1);
-  playerIdx = racers.findIndex(x => x.isPlayer);
+  if (netSpectate) {
+    // The camera is riding one of these. If it was this one, or the shuffle moved
+    // it, put it somewhere valid rather than leaving it pointing at nothing.
+    spectateIdx = Math.min(spectateIdx, racers.length - 1);
+    playerIdx = Math.max(0, spectateIdx);
+    if (racers.length) updateSpectateBar();
+  } else {
+    playerIdx = racers.findIndex(x => x.isPlayer);
+  }
   buildLiveOrder();
 }
 
@@ -6955,6 +7014,7 @@ function updateRemote(r, dt) {
 const Net = (() => {
   let ws = null, code = '', myId = '', hostId = '', open = false;
   let peers = new Map();          // id -> {id,name,chair,char}
+  let liveRace = null;            // the running race, if there is one
   let sendAcc = 0, retries = 0, retryHandle = 0, netChipT = 0;
   let wantOpen = false;           // did we ask to be connected, or did we leave
   const SEND_DT = 1 / 15;
@@ -7017,9 +7077,9 @@ const Net = (() => {
         const i = netGrid.indexOf(p.id);
         addRemote(p, i < 0 ? racers.length : i);
       });
-      // Arriving while a race is on. For now that means waiting it out in the
-      // lobby; watching it is the next piece of work.
-      if (d.race && !netRace && !freeDrive) emit('status');
+      // Arriving while a race is on: straight into watching it.
+      liveRace = d.race || null;
+      if (d.race && !netRace && !netSpectate) startSpectate(d.race);
     } else if (d.t === 'join') {
       peers.set(d.p.id, decodeKit(d.p));
       if (freeDrive) addRemote(peers.get(d.p.id));
@@ -7058,11 +7118,22 @@ const Net = (() => {
       // Six seconds of countdown is plenty of time to sharpen the clock, and the
       // countdown is the one thing that has to line up exactly.
       syncClock();
-      startNetRace(d.race);
+      // Everyone on the grid races. Anyone who arrived after it was decided
+      // watches instead of being dropped in with no starting position.
+      liveRace = d.race;
+      const onGrid = Array.isArray(d.race.grid) && d.race.grid.indexOf(myId) >= 0;
+      if (onGrid) startNetRace(d.race); else startSpectate(d.race);
     } else if (d.t === 'fin') {
       recordNetFinish(d.f);
     } else if (d.t === 'endrace') {
+      liveRace = null;
       if (netRace) { endNetRace(); showLobby(); }
+      else if (netSpectate) { endSpectate(); showLobby(); }
+    } else if (d.t === 'raceover') {
+      // Everyone has crossed the line. There is nothing left to watch, but the
+      // people who were in it keep their results screen.
+      liveRace = null;
+      emit('roster');
     }
   }
 
@@ -7168,8 +7239,11 @@ const Net = (() => {
     sendAcc += dt;
     if (sendAcc < SEND_DT) return;
     sendAcc = 0;
+    // A spectator has no chair, and playerIdx is pointing at somebody else's.
+    // Sending from here would relay their position back to them under our name.
+    if (netSpectate) return;
     const p = racers[playerIdx];
-    if (!p) return;
+    if (!p || !p.isPlayer) return;
     const f = ((p.boostT > 0 || p.driftBoostT > 0) ? 1 : 0)
             | (p.driftActive ? 2 : 0)
             | (p.abilityT > 0 ? 4 : 0)
@@ -7190,6 +7264,8 @@ const Net = (() => {
     retryNow: () => { retries = 0; if (!ws && wantOpen) connect(code); },
     on: (k, f) => listeners[k].push(f),
     get code() { return code; },
+    get liveRace() { return liveRace; },
+    watch: () => { if (liveRace) startSpectate(liveRace); },
     get open() { return open; },
     get connecting() { return wantOpen && !open; },
     get peers() { return [...peers.values()]; },
@@ -7201,6 +7277,7 @@ const Net = (() => {
 const lobbyEl = document.getElementById('lobby');
 const lobbyNote = document.getElementById('lobbyNote');
 const netChip = document.getElementById('netChip');
+const specBar = document.getElementById('specBar');
 
 function showLobby() {
   mode = 'title';
@@ -7208,6 +7285,7 @@ function showLobby() {
   startPending = false;   // cancels a scene build queued a frame or two ago
   endFreeDrive();
   endNetRace();
+  endSpectate();
   Sound.setMode('menu'); Sound.duck(false);
   document.getElementById('muteBtn').style.display = 'block';
   document.getElementById('start').classList.add('hidden');
@@ -7243,12 +7321,19 @@ function renderLobby() {
     b.style.cursor = host ? 'pointer' : 'default';
   });
 
+  // A race is already running and we are not in it: offer to watch rather than
+  // leaving the only way in behind a page reload.
+  const watchBtn = document.getElementById('lobbyWatchBtn');
+  const raceLive = !!Net.liveRace;
+  watchBtn.classList.toggle('hidden', !raceLive);
+
   const raceBtn = document.getElementById('lobbyRaceBtn');
-  const canRace = host && Net.count >= 2;
+  const canRace = host && Net.count >= 2 && !raceLive;
   raceBtn.style.opacity = canRace ? '1' : '.42';
   raceBtn.style.cursor = canRace ? 'pointer' : 'default';
-  raceBtn.title = host ? (Net.count >= 2 ? '' : 'Waiting for someone to join')
-                       : 'Only the host can start a race';
+  raceBtn.title = raceLive ? 'A race is already running'
+                : host ? (Net.count >= 2 ? '' : 'Waiting for someone to join')
+                : 'Only the host can start a race';
 
   const list = document.getElementById('lobbyList');
   list.innerHTML = '';
@@ -7275,6 +7360,8 @@ function renderLobby() {
   } else if (!Net.open) {
     note = 'Lost the connection to the room. Tap here to try again.';
     warn = true;
+  } else if (raceLive) {
+    note = 'A race is under way. Watch it, and you will be on the grid for the next one.';
   } else if (Net.count < 2) {
     note = 'Send the link to a colleague. You can drive now and they will appear when they arrive.';
   } else if (host) {
@@ -7299,12 +7386,13 @@ Net.on('status', () => { renderLobby(); updateNetChip(); });
 Net.on('map', () => { if (!lobbyEl.classList.contains('hidden')) renderLobby(); });
 
 function updateNetChip() {
-  if (!freeDrive && !netRace) return;
+  if (!freeDrive && !netRace && !netSpectate) return;
   netChip.classList.toggle('off', !Net.open);
   netChip.querySelector('.cd').textContent = Net.code;
   const mine = racers && racers.find(x => x.isPlayer);
   netChip.querySelector('.pc').textContent =
     !Net.open ? 'reconnecting\u2026'
+    : netSpectate ? 'watching \u00b7 ' + racers.length + ' racing'
     : (netRace && mine && mine.finished)
       ? 'finished \u00b7 waiting for ' + Math.max(1, Net.count - netFinish.length) + ' more'
     : netRace ? Net.count + ' racing'
@@ -7483,7 +7571,7 @@ function recordNetFinish(f) {
   }
   // The first person over the line starts a clock on everyone else. Without it,
   // one person wandering off mid-race leaves the rest staring at a HUD for ever.
-  if (netRace && !netResultTimer) {
+  if ((netRace || netSpectate) && !netResultTimer) {
     netResultTimer = setTimeout(netRaceResults, STRAGGLER_WAIT * 1000);
   }
   checkNetRaceOver();
@@ -7496,16 +7584,28 @@ let netResultTimer = 0;
 // The race is done when everyone still in the room has crossed the line. Called
 // on every finish and again whenever somebody leaves, since leaving lowers the
 // number of people we are waiting for.
+// Only people who were on the grid can finish. Counting everyone in the room
+// instead would mean a spectator who arrived mid-race kept the rest waiting for
+// a finish that was never coming.
+function expectedFinishers() {
+  const here = id => id === Net.myId || Net.peers.some(p => p.id === id);
+  const n = netGrid.filter(here).length;
+  return Math.max(1, n);
+}
+
 function checkNetRaceOver() {
-  if (!netRace || raceOver) return;
-  const mine = racers.find(x => x.isPlayer);
-  if (!mine || !mine.finished) return;            // never end it before your own race
-  if (netFinish.length >= Net.count) netRaceResults();
+  if ((!netRace && !netSpectate) || raceOver) return;
+  if (netRace) {
+    const mine = racers.find(x => x.isPlayer);
+    if (!mine || !mine.finished) return;          // never end it before your own race
+  }
+  if (netFinish.length >= expectedFinishers()) netRaceResults();
 }
 function netRaceResults() {
-  if (!netRace || raceOver) return;
+  if ((!netRace && !netSpectate) || raceOver) return;
   raceOver = true;
   clearTimeout(netResultTimer); netResultTimer = 0;
+  specBar.classList.add('hidden');
   const order = racers.slice().sort((a, b) => {
     if (a.finished && b.finished) return a.place - b.place;
     if (a.finished) return -1;
@@ -7514,6 +7614,112 @@ function netRaceResults() {
   });
   order.forEach((r, i) => { if (!r.place) r.place = i + 1; });
   setTimeout(() => showResults(order), 900);
+}
+
+// ---------- spectating ----------
+// Opening the link while a race is running. There is no chair for you — the grid
+// was decided before you arrived — so instead of inventing one, the camera adopts
+// somebody else's.
+//
+// The trick that keeps this simple: playerIdx is pointed at the chair being
+// watched. Everything downstream — camera, minimap, the speed and lap readouts —
+// then follows that racer without knowing anything has changed.
+function startSpectate(race) {
+  if (startPending) return;
+  netGrid = Array.isArray(race.grid) ? race.grid : [];
+  netFinish = [];
+  const mapKey = Object.keys(MAPS)[race.map];
+  if (mapKey) selMap = mapKey;
+  startPending = true;
+  running = false;
+  const veil = document.getElementById('loadVeil');
+  if (veil) veil.classList.add('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!startPending) { if (veil) veil.classList.remove('show'); return; }
+    try { buildSpectateNow(); } finally {
+      startPending = false;
+      if (veil) veil.classList.remove('show');
+    }
+  }));
+}
+
+function buildSpectateNow() {
+  endFreeDrive(); endNetRace();
+  netSpectate = true;
+  lobbyEl.classList.add('hidden');
+  menuUI.classList.add('hidden');
+  withSeed(mulberry32(worldSeed(selMap)), () => buildScene(selMap));
+  racers = []; finishOrder = []; particles = [];
+  raceOver = false; finishFxT = 0; crowdHypeT = 0;
+  paused = false; resumeT = 0; finalLapShown = true;
+  elapsed = 0; raceT = 0; raceBanked = true;
+  mode = 'race'; lastCountShown = -1; lastResumeShown = -1;
+  hudPrevReady = false; hudLastLap = -1; hudLastRank = 0;
+  glitchCd = 0; notifyCd = 0; hitFxT = 0;
+  camInit = false;
+  document.getElementById('pause').classList.add('hidden');
+  document.getElementById('speedFx').classList.remove('on');
+  document.getElementById('hud').classList.remove('glitch');
+  document.getElementById('hitFx').style.opacity = '0';
+  Sound.setMode('race'); Sound.duck(false);
+  document.getElementById('muteBtn').style.display = 'block';
+  withSeed(mulberry32(worldSeed(selMap) ^ 0x5bf03635), () => setupCrossers());
+  clearPapers();
+
+  Net.peers.forEach(p => {
+    const i = netGrid.indexOf(p.id);
+    if (i >= 0) addRemote(p, i);          // only people who are actually racing
+  });
+  spectateIdx = 0;
+  playerIdx = 0;
+  buildLiveOrder();
+
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  posWrapEl.classList.remove('hidden');
+  document.getElementById('lapWrap').classList.remove('hidden');
+  netChip.classList.remove('hidden');
+  document.getElementById('touch').classList.remove('on');
+  specBar.classList.remove('hidden');
+  updateSpectateBar();
+  updateNetChip();
+  checkOrientation();
+  countdownT = -2;
+  running = true;
+  clock.getDelta();
+}
+
+// Cycle to the next chair worth watching. Skips anyone who has already finished
+// while somebody is still out there.
+function spectateNext(dir) {
+  if (!netSpectate || !racers.length) return;
+  const n = racers.length;
+  for (let k = 1; k <= n; k++) {
+    const i = ((spectateIdx + (dir || 1) * k) % n + n) % n;
+    if (racers[i].finished && racers.some(r => !r.finished)) continue;
+    spectateIdx = i;
+    break;
+  }
+  playerIdx = spectateIdx;
+  camInit = false;
+  Sound.click();
+  updateSpectateBar();
+}
+
+function updateSpectateBar() {
+  const r = racers[playerIdx];
+  specBar.querySelector('.nm').textContent = r ? r.name : '\u2014';
+  specBar.querySelector('.of').textContent = racers.length > 1
+    ? (playerIdx + 1) + ' of ' + racers.length : '';
+}
+
+function endSpectate() {
+  netSpectate = false;
+  clearTimeout(netResultTimer); netResultTimer = 0;
+  specBar.classList.add('hidden');
+  for (const r of [...(racers || [])]) if (r.isRemote) dropRemote(r.netId);
+  netGrid = []; netFinish = [];
 }
 
 function endNetRace() {
@@ -7559,6 +7765,9 @@ document.getElementById('lobbyCopy').onclick = async () => {
 };
 
 document.getElementById('lobbyKitBtn').onclick = () => { Sound.click(); netFlow = true; openMenu(0); };
+document.getElementById('lobbyWatchBtn').onclick = () => { Sound.select(); Net.watch(); };
+document.getElementById('specNextBtn').onclick = () => spectateNext(1);
+document.getElementById('specLeaveBtn').onclick = () => { Sound.back(); endSpectate(); showLobby(); };
 document.getElementById('lobbyDriveBtn').onclick = () => { Sound.select(); startFreeDrive(); };
 document.getElementById('lobbyRaceBtn').onclick = () => {
   if (!Net.isHost() || Net.count < 2) return;
@@ -7584,6 +7793,20 @@ function joinFromHash() {
 }
 
 addEventListener('pagehide', () => { if (mode === 'race') bankRun(true); });
+
+// Pasting the same link into a tab that is already on the page changes only the
+// fragment, and a fragment change does not reload anything. Without this, coming
+// back to a room by pasting the link again looked like the link was broken.
+addEventListener('hashchange', () => {
+  const m = (location.hash || '').match(/^#r=([A-Za-z0-9]{4,6})$/);
+  if (!m) return;
+  const code = m[1].toUpperCase();
+  if (Net.code === code && Net.open) return;    // already in this room
+  endFreeDrive(); endNetRace(); endSpectate();
+  Net.leave();
+  Net.connect(code);
+  showLobby();
+});
 
 // A shared link goes straight to its room; everything else starts at the title.
 if (!joinFromHash()) showTitle();
