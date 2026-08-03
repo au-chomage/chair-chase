@@ -7028,6 +7028,15 @@ const Net = (() => {
            '&char=' + Object.keys(CHARACTERS).indexOf(selChar);
   }
 
+  // A race only counts as watchable while somebody who started it is still in
+  // the room. Otherwise watching it means an empty track and a HUD reporting on
+  // nobody, which is what the button used to do.
+  function watchable() {
+    if (!liveRace || !Array.isArray(liveRace.grid)) return null;
+    const here = id => id === myId || peers.has(id);
+    return liveRace.grid.some(here) ? liveRace : null;
+  }
+
   function decodeKit(p) {
     const ck = Object.keys(CHAIRS)[p.chair] || 'ergo';
     const hk = Object.keys(CHARACTERS)[p.char] || 'manager';
@@ -7142,6 +7151,7 @@ const Net = (() => {
     // Already in this room and connected: nothing to do. Reconnecting here would
     // hand you a new identity and briefly put two of you in the same lobby.
     if (ws && code === roomCode.toUpperCase()) return true;
+    liveRace = null;              // a different room knows nothing of the old one
     code = roomCode.toUpperCase();
     wantOpen = true;
     location.hash = 'r=' + code;
@@ -7202,6 +7212,10 @@ const Net = (() => {
   function leave() {
     wantOpen = false; retries = 0;
     clearTimeout(retryHandle);
+    // Forgetting this was the whole problem: the old room's race came with you
+    // into the next one, so a brand new room offered a race to watch that had
+    // finished in a different room minutes ago.
+    liveRace = null;
     peers = new Map(); myId = ''; hostId = '';
     closeSocket();
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
@@ -7264,8 +7278,8 @@ const Net = (() => {
     retryNow: () => { retries = 0; if (!ws && wantOpen) connect(code); },
     on: (k, f) => listeners[k].push(f),
     get code() { return code; },
-    get liveRace() { return liveRace; },
-    watch: () => { if (liveRace) startSpectate(liveRace); },
+    get liveRace() { return watchable(); },
+    watch: () => { const r = watchable(); if (r) startSpectate(r); },
     get open() { return open; },
     get connecting() { return wantOpen && !open; },
     get peers() { return [...peers.values()]; },
@@ -7670,6 +7684,18 @@ function buildSpectateNow() {
     const i = netGrid.indexOf(p.id);
     if (i >= 0) addRemote(p, i);          // only people who are actually racing
   });
+
+  // Belt and braces. If every racer vanished between pressing Watch and the
+  // scene finishing building, there is nothing to look at, and staring at an
+  // empty office reads as a broken game rather than an empty race.
+  if (!racers.length) {
+    netSpectate = false;
+    showLobby();
+    lobbyNote.textContent = 'That race finished before you could join it.';
+    lobbyNote.classList.add('warn');
+    return;
+  }
+
   spectateIdx = 0;
   playerIdx = 0;
   buildLiveOrder();
