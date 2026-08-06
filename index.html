@@ -59,6 +59,10 @@
     #start.title { padding-left:0; align-items:center; background:linear-gradient(180deg, rgba(9,14,17,.32), rgba(9,14,17,.84)); }
     .titleInner { text-align:center; }
     .titleBtns { margin-left:auto; margin-right:auto; }
+    /* Too narrow to keep two labels side by side at full size without cramming,
+       and a single column of four is unremarkable on a phone. */
+    .titleBtns { grid-template-columns:1fr; }
+    .titleBtns .go { padding:13px 18px; }
   }
   button.go { margin-top:28px; font:inherit; font-size:20px; font-style:italic; letter-spacing:2px; text-transform:uppercase; color:#0c1418; background:#35b6c4; border:none; padding:14px 46px; cursor:pointer; transform:skewX(-8deg); }
   button.go:hover { background:#5ccbd7; transform:skewX(-8deg) translateY(-2px); box-shadow:0 7px 0 rgba(0,0,0,.28); }
@@ -66,12 +70,14 @@
   /* Title menu: four buttons in one ragged column read as a list of equals and
      crowd the wordmark. A grid gives them a shared right edge and lets the two
      ways to play sit above the two things that are only reference material. */
-  .titleBtns { display:grid; grid-template-columns:1fr 1fr; column-gap:20px; row-gap:13px;
-    width:min(430px,100%); margin-top:26px; }
-  .titleBtns .go { margin-top:0; width:100%; padding:14px 22px; }
-  .titleBtns #startBtn, .titleBtns #netBtn { grid-column:1 / -1; }
-  /* The pair below carries less weight, so it is smaller as well as narrower. */
-  .titleBtns #boardBtn, .titleBtns #aboutBtn { font-size:16px; letter-spacing:1.4px; padding:12px 14px; }
+  .titleBtns { display:grid; grid-template-columns:1fr 1fr; column-gap:18px; row-gap:13px;
+    width:min(490px,100%); margin-top:26px; }
+  /* One type size across all four. Width and colour already say which two matter
+     more, and a fourth signal saying the same thing read as the text having been
+     shrunk to fit rather than chosen. Wider grid and tighter side padding so the
+     longest label still fits a half-width cell at full size. */
+  .titleBtns .go { margin-top:0; width:100%; padding:14px 14px; white-space:nowrap; }
+  .titleBtns #startBtn, .titleBtns #netBtn { grid-column:1 / -1; padding:14px 22px; }
   /* Multiplayer is a way to play, not a menu item, so it keeps a teal cast
      without competing with Start for the eye. */
   /* Deliberately not .go.alt: that rule lives further down the sheet and, at equal
@@ -1000,7 +1006,7 @@ const Sound = (() => {
 // ================= end audio =================
 
 const CHAIRS = {
-  gaming:  { name:'Gaming Chair',    desc:'Very fast, hard to steer', color:0xd32f2f, maxSpeed:48.5, accel:34, steer:1.55, grip:0.45 },
+  gaming:  { name:'Gaming Chair',    desc:'Fast, hard to steer',      color:0xd32f2f, maxSpeed:46.5, accel:31, steer:1.55, grip:0.45 },
   ergo:    { name:'Ergonomic Chair', desc:'Balanced all-rounder',     color:0x24262e, maxSpeed:45, accel:28, steer:2.1, grip:0.7 },
   // Raised from 41. At 41 it lapped 4.6s off the pace, which is not a trade-off,
   // it is just the worse chair. Acceleration was measured and does nothing here -
@@ -1232,6 +1238,11 @@ function isCorner(i) { return turnAt(i, 4) > 0.22; }
 // ---------- helpers ----------
 function normAngle(a) { while (a > Math.PI) a -= Math.PI*2; while (a < -Math.PI) a += Math.PI*2; return a; }
 const ORD_TXT = n => ['','1st','2nd','3rd','4th'][n] || n+'th';
+
+// Rivals in a solo race. The player makes the field up to RIVALS + 1.
+// There are five characters, so four rivals means every one of them turns up in
+// every race, each on a different person.
+const RIVALS = 4;
 const _lamCache = {};
 const lam = c => _lamCache[c] || (_lamCache[c] = new THREE.MeshLambertMaterial({ color: c }));
 
@@ -4680,7 +4691,7 @@ function makeRacer(chairKey, charCfg, isPlayer, gridSlot, charKey) {
   mesh.rotation.y = heading;
   scene.add(mesh);
   return {
-    mesh, legs: mesh.userData.legs, upper: mesh.userData.upper, legPhase: Math.random() * 6.28, stats, isPlayer, chairKey,
+    mesh, legs: mesh.userData.legs, upper: mesh.userData.upper, legPhase: Math.random() * 6.28, stats, isPlayer, chairKey, gridSlot,
     lapStart: 0, bestLap: 0, lapTimes: [], totalTime: 0, dist: 0,
     charKey, abilityT: 0, abilityCd: 0, wobbleT: 0, slowT: 0,
     hr: 0, hrCd: 0,   // HR complaints, and a guard so one thump counts once
@@ -4759,10 +4770,11 @@ function buildRaceNow() {
   document.getElementById('muteBtn').style.display = 'none';
   setupCrossers();
   clearPapers();
-  const aiNames = pickRivalNames(3);
+  const aiNames = pickRivalNames(RIVALS);
   const chairKeys = Object.keys(CHAIRS);
-  // Shuffled, not walked in order: with five characters and three rivals, a fixed
-  // order would silently leave the same one out of every single race.
+  // Four rivals drawn from the four characters you did not pick, so the whole
+  // cast is on the grid every time. Still shuffled, so which rival wears which
+  // character changes from race to race.
   const charKeys = Object.keys(CHARACTERS).filter(k => k !== selChar);
   for (let i = charKeys.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -4770,7 +4782,7 @@ function buildRaceNow() {
   }
   racers.push(makeRacer(selChair, CHARACTERS[selChar], true, 0, selChar));
   racers[0].name = cleanName(Leaderboard.getName()) || 'You';
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < RIVALS; i++) {
     const ck = chairKeys[Math.floor(Math.random() * chairKeys.length)];
     const charKey = charKeys[i % charKeys.length];
     const r = makeRacer(ck, CHARACTERS[charKey], false, i + 1, charKey);
@@ -5693,6 +5705,20 @@ function updateAbilities(dt, active) {
   }
 }
 
+// Chair-to-chair contact.
+//
+// This used to take 8% off both chairs the moment they touched, whatever had
+// happened. Rear-ending someone, being rear-ended, a glancing scrape down a
+// corridor and a head-on all felt identical, and rubbing alongside somebody bled
+// speed continuously for as long as you stayed in contact.
+//
+// It now works off how fast the two are actually converging, so a brush costs
+// nothing and a proper shunt hurts. Momentum goes where it should: run into the
+// back of someone and you lose speed while they gain it.
+const HIT_RESTITUTION = 0.28;   // a little bounce, not a snooker ball
+const HIT_SPIN = 0.020;         // radians of twist per unit of glancing impact
+const HIT_MAX = 55;             // clamp, so a head-on cannot fling anyone
+
 function racerCollisions() {
   for (let i = 0; i < racers.length; i++) for (let j = i+1; j < racers.length; j++) {
     const a = racers[i], b = racers[j];
@@ -5701,35 +5727,80 @@ function racerCollisions() {
     if (a.isRemote && b.isRemote) continue;
     const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
     const d2 = dx*dx + dz*dz, min = 2.1;
-    if (d2 < min*min && d2 > 0.0001) {
-      const d = Math.sqrt(d2), overlap = min - d;
-      const nx = dx/d, nz = dz/d;
-      // The heavier racer gives up less ground. With no ability active both
-      // masses are 1, which reproduces the old even split exactly.
-      const ma = abilityMass(a), mb = abilityMass(b), tot = ma + mb;
-      const sa = overlap * (mb / tot), sb = overlap * (ma / tot);
-      // This was the thing I said could not be done. It can, as long as each
-      // machine only ever moves its own chair.
-      //
-      // A relayed position is a fact that arrived over the wire; writing to it
-      // would just be overwritten by the next packet, and the two machines would
-      // argue. So we shove our own chair by exactly the share it was owed and
-      // leave theirs alone. The other browser is running this same check and
-      // shoving its own the other way, so the pair separates by the full overlap
-      // between them and neither has touched anything it does not own.
-      if (!b.isRemote) { b.pos.x += nx*sb; b.pos.z += nz*sb; }
-      if (!a.isRemote) { a.pos.x -= nx*sa; a.pos.z -= nz*sa; }
-      const aa = abilityOf(a), ab = abilityOf(b);
-      // Same rule for the speed penalty: only ours to apply. Their speed is
-      // whatever they last told us it was.
-      if (!a.isRemote) a.speed *= 1 - 0.08 * (1 - ((aa && aa.knock) || 0));
-      if (!b.isRemote) b.speed *= 1 - 0.08 * (1 - ((ab && ab.knock) || 0));
-      if (ma !== mb) {                                   // a shove worth feeling
-        const heavy = ma > mb ? a : b, hv = ma > mb ? aa : ab, tint = (aa || ab).tint;
-        const mx = (a.pos.x + b.pos.x) / 2, mz = (a.pos.z + b.pos.z) / 2;
-        spawnDust(mx, mz, false, tint);
-        if (hv && hv.impact) spawnShock(mx, mz, hv.tint);
-        if (heavy.isPlayer || a.isPlayer || b.isPlayer) camKick = Math.max(camKick, 0.045);
+    if (d2 >= min*min || d2 <= 0.0001) continue;
+
+    const d = Math.sqrt(d2), overlap = min - d;
+    const nx = dx/d, nz = dz/d;                     // unit normal, a towards b
+    const ma = abilityMass(a), mb = abilityMass(b), tot = ma + mb;
+
+    // --- separate them ---
+    // The heavier racer gives up less ground. With no ability active both masses
+    // are 1, which reproduces the old even split exactly.
+    //
+    // Each machine only ever moves its own chair. A relayed position is a fact
+    // that arrived over the wire; writing to it would be overwritten by the next
+    // packet and the two machines would argue. The other browser runs this same
+    // check and shoves its own the other way, so the pair separates by the full
+    // overlap and neither has touched anything it does not own.
+    const sa = overlap * (mb / tot), sb = overlap * (ma / tot);
+    if (!b.isRemote) { b.pos.x += nx*sb; b.pos.z += nz*sb; }
+    if (!a.isRemote) { a.pos.x -= nx*sa; a.pos.z -= nz*sa; }
+
+    // --- how hard was it, really? ---
+    // Chairs only travel along their own nose, so velocity is speed times
+    // heading. Closing speed is what is left of the difference once projected
+    // onto the line between them.
+    const fax = Math.sin(a.heading), faz = Math.cos(a.heading);
+    const fbx = Math.sin(b.heading), fbz = Math.cos(b.heading);
+    const rvx = fbx*b.speed - fax*a.speed, rvz = fbz*b.speed - faz*a.speed;
+    const closing = -(rvx*nx + rvz*nz);
+
+    // Already moving apart: they are alongside each other, not colliding. This
+    // is the case that used to cost 8% a frame for as long as you stayed there.
+    if (closing <= 0.5) continue;
+
+    const jImp = Math.min(closing, HIT_MAX) * (1 + HIT_RESTITUTION) / (1/ma + 1/mb);
+    const aa = abilityOf(a), ab = abilityOf(b);
+    // A knock rating is armour: it soaks up the impulse rather than exempting
+    // you from the old flat percentage.
+    const armA = 1 - ((aa && aa.knock) || 0), armB = 1 - ((ab && ab.knock) || 0);
+
+    // Along each chair's own nose. Hit the back of someone and the normal points
+    // the way you are already going: you lose speed, they are shoved forward.
+    // Catch them side-on and this is near zero, which is as it should be.
+    if (!a.isRemote) a.speed -= (fax*nx + faz*nz) * (jImp / ma) * armA;
+    if (!b.isRemote) b.speed += (fbx*nx + fbz*nz) * (jImp / mb) * armB;
+
+    // --- and a twist for glancing blows ---
+    // Pure side-on gives lat = 1, a straight rear-ender gives 0. Being clipped
+    // knocks your nose off line, which is the part that actually costs you time
+    // on an office chair.
+    const latA = 1 - Math.abs(fax*nx + faz*nz);
+    const latB = 1 - Math.abs(fbx*nx + fbz*nz);
+    const crossA = fax*nz - faz*nx;
+    const crossB = fbx*nz - fbz*nx;
+    if (!a.isRemote && latA > 0.05) {
+      const t = Math.sign(crossA) * latA * jImp * HIT_SPIN * armA / ma;
+      a.dir += t; a.heading += t * 0.35;
+    }
+    if (!b.isRemote && latB > 0.05) {
+      const t = -Math.sign(crossB) * latB * jImp * HIT_SPIN * armB / mb;
+      b.dir += t; b.heading += t * 0.35;
+    }
+
+    // --- feedback, scaled to the hit ---
+    const mx = (a.pos.x + b.pos.x) / 2, mz = (a.pos.z + b.pos.z) / 2;
+    const tint = (aa || ab || {}).tint;
+    const heavy = ma > mb ? aa : ab;
+    spawnDust(mx, mz, false, tint);
+    if (jImp > 14) spawnDust(mx, mz, false, tint);
+    if ((heavy && heavy.impact) || jImp > 22) spawnShock(mx, mz, (heavy && heavy.tint) || tint);
+    if (a.isPlayer || b.isPlayer) {
+      camKick = Math.max(camKick, Math.min(0.11, 0.02 + jImp * 0.0035));
+      if (jImp > 18) {
+        Sound.crash();
+        const other = a.isPlayer ? b : a;
+        flashHit(CHAIRS[other.chairKey] ? '#' + CHAIRS[other.chairKey].color.toString(16).padStart(6,'0') : '#ffffff');
       }
     }
   }
@@ -5934,7 +6005,9 @@ function showResults(order) {
   const subs = {
     1: 'First to the printer. Undisputed.',
     2: 'So close. One more push next time.',
-    3: 'On the podium, just barely.'
+    3: 'On the podium, just barely.',
+    4: 'Off the podium. Someone has to hold the doors.',
+    5: 'Last past the water cooler. It happens.'
   };
   document.getElementById('resultMedal').textContent = watching ? '👀' : (medals[place] || '🏁');
   const conf = document.getElementById('confetti'); conf.innerHTML = '';
@@ -7016,6 +7089,11 @@ const Net = (() => {
   let peers = new Map();          // id -> {id,name,chair,char}
   let liveRace = null;            // the running race, if there is one
   let sendAcc = 0, retries = 0, retryHandle = 0, netChipT = 0;
+  // A backstop against connection churn. A logic bug that reconnects in a loop
+  // only wastes a socket on a laptop; on a phone it exhausts the tab and Safari
+  // kills the page, which then reloads into the same room and does it again.
+  // Nothing legitimate opens sockets this fast.
+  let connectTimes = [];
   let wantOpen = false;           // did we ask to be connected, or did we leave
   const SEND_DT = 1 / 15;
 
@@ -7151,6 +7229,18 @@ const Net = (() => {
     // Already in this room and connected: nothing to do. Reconnecting here would
     // hand you a new identity and briefly put two of you in the same lobby.
     if (ws && code === roomCode.toUpperCase()) return true;
+
+    const now = Date.now();
+    connectTimes = connectTimes.filter(t => now - t < 10000);
+    if (connectTimes.length >= 8) {
+      // Give up loudly rather than taking the browser down with us.
+      wantOpen = false;
+      clearTimeout(retryHandle);
+      closeSocket();
+      emit('status');
+      return false;
+    }
+    connectTimes.push(now);
     liveRace = null;              // a different room knows nothing of the old one
     code = roomCode.toUpperCase();
     wantOpen = true;
@@ -7211,6 +7301,7 @@ const Net = (() => {
 
   function leave() {
     wantOpen = false; retries = 0;
+    connectTimes = [];
     clearTimeout(retryHandle);
     // Forgetting this was the whole problem: the old room's race came with you
     // into the next one, so a brand new room offered a race to watch that had
@@ -7275,9 +7366,13 @@ const Net = (() => {
   return {
     connect, leave, tick, sendKit, sendMap, sendRace, sendFinish, sendEndRace, isHost,
     get myId() { return myId; },
-    retryNow: () => { retries = 0; if (!ws && wantOpen) connect(code); },
+    retryNow: () => {
+      retries = 0; connectTimes = []; wantOpen = true;
+      if (!ws) connect(code);
+    },
     on: (k, f) => listeners[k].push(f),
     get code() { return code; },
+    get stalled() { return wantOpen === false && !open && !!code; },
     get liveRace() { return watchable(); },
     watch: () => { const r = watchable(); if (r) startSpectate(r); },
     get open() { return open; },
@@ -7371,6 +7466,9 @@ function renderLobby() {
     warn = true;
   } else if (Net.connecting) {
     note = 'Connecting\u2026';
+  } else if (Net.stalled) {
+    note = 'Could not settle on a connection. Tap here to try again, or reload the page.';
+    warn = true;
   } else if (!Net.open) {
     note = 'Lost the connection to the room. Tap here to try again.';
     warn = true;
@@ -7394,6 +7492,8 @@ lobbyNote.addEventListener('click', () => {
   Sound.click();
   Net.retryNow();
 });
+// The manual retry has to clear the churn guard too, or one stall would leave
+// the room permanently unjoinable until a reload.
 
 Net.on('roster', () => { renderLobby(); updateNetChip(); });
 Net.on('status', () => { renderLobby(); updateNetChip(); });
