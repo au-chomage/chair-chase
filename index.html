@@ -396,6 +396,19 @@
   #netChip .pc { color:#bfe4ea; font-family:Verdana,sans-serif; letter-spacing:0; font-size:12px; }
   #netChip.off { border-left-color:#e8a06a; }
 
+  /* The break between the top of the board and the part of it you are actually
+     in. Without something visibly separating them, row 21 reads as if it follows
+     row 20, and it does not. */
+  .boardList li.gapRow { background:none; border-left-color:transparent; justify-content:center;
+    padding:2px 0 6px; margin-bottom:2px; color:#5d7f86; letter-spacing:6px; font-size:15px; }
+  .boardList li.gapRow .lab { letter-spacing:1.6px; font-size:10px; text-transform:uppercase; margin-left:10px; }
+  /* How far ahead the person above you is. The number that makes the rest of it
+     worth reading. */
+  .boardList .dl { font-family:Verdana,sans-serif; font-size:11px; color:#e8a06a; letter-spacing:0;
+    min-width:52px; text-align:right; }
+  .boardList li.you .dl { color:#ffd34d; }
+  .boardTarget { font-family:Verdana,sans-serif; font-size:12.5px; color:#8fb3ba; margin:8px 0 0; text-align:center; }
+
   /* ---- name entry + leaderboard ---- */
   .nameRow { margin:14px 0 4px; }
   .nameInput { font:inherit; font-size:17px; letter-spacing:1px; color:#eaf7f9; background:rgba(9,14,17,.72);
@@ -428,6 +441,7 @@
     padding:0 14px 7px; margin-bottom:4px; border-bottom:1px solid rgba(53,182,196,.22);
     font-size:11px; letter-spacing:1.2px; text-transform:uppercase; color:#7fa3ab; }
   .boardHead .rk { width:32px; }
+  .boardHead .dl { min-width:52px; }
   .boardHead .nm { flex:1; }
   .boardHead .tm { text-align:right; }
   .boardList { list-style:none; margin:0; padding:0; width:min(560px,92vw); max-height:46vh; overflow-y:auto; }
@@ -6638,6 +6652,20 @@ const Leaderboard = (() => {
         return await r.json();
       } catch (e) { return null; }
     },
+    // Where this player stands when they are nowhere near the top of the board.
+    // Deliberately allowed to fail quietly: an older leaderboard worker has no
+    // such endpoint, and the board should simply look the way it always did
+    // rather than breaking.
+    async rank(mapKey, by, name) {
+      if (!LEADERBOARD_URL || !name) return null;
+      try {
+        const r = await fetch(base() + '/rank?map=' + encodeURIComponent(mapKey) +
+                              '&by=' + (by || 'lap') + '&name=' + encodeURIComponent(name));
+        if (!r.ok) return null;
+        return await r.json();
+      } catch (e) { return null; }
+    },
+
     async top(mapKey, by) {
       if (LEADERBOARD_URL) {
         try {
@@ -6694,30 +6722,92 @@ async function renderBoard() {
       (boardBy === 'hr' ? 'A spotless record. For now.' : 'No times yet. Be the first.') + '</li>';
   } else {
     head.classList.remove('hidden');
+    // The empty span keeps the header aligned with the delta column that rows
+    // below the break carry.
     head.innerHTML = '<span class="rk">#</span><span class="nm">Player</span>' +
       '<span class="ch">' + (boardBy === 'lap' ? 'Chair' : 'Races') + '</span>' +
+      '<span class="dl"></span>' +
       '<span class="tm">' + (boardBy === 'dist' ? 'Distance' : boardBy === 'hr' ? 'Complaints' : 'Best lap') + '</span>';
-    rows.slice(0, 20).forEach((e, i) => {
-      const li = document.createElement('li');
-      if (me && e.name === me) li.classList.add('you');
-      const main = boardBy === 'dist' ? fmtDist(e.dist)
-                 : boardBy === 'hr' ? String(e.hr || 0)
-                 : fmtTime(e.bestLap);
-      const sub  = boardBy === 'lap'
-        ? (CHAIRS[e.chair] ? CHAIRS[e.chair].name : '')
-        : String(e.races || 1);
-      li.innerHTML = '<span class="rk">' + (i + 1) + '</span><span class="nm"></span>' +
-                     '<span class="ch"></span><span class="tm">' + main + '</span>';
-      li.querySelector('.nm').textContent = e.name || 'Anonymous';
-      li.querySelector('.ch').textContent = sub;
-      list.appendChild(li);
-    });
+    const top20 = rows.slice(0, 20);
+    top20.forEach((e, i) => list.appendChild(boardRow(e, i + 1, me)));
+
+    // Everything below is for the person who is not in that list. Twenty
+    // strangers and no idea whether you are twenty-first or five hundredth is
+    // the board's biggest failing once more than a handful of people play.
+    const inTop = top20.some(e => me && e.name === me);
+    if (me && !inTop) {
+      const r = await Leaderboard.rank(boardMap, boardBy, me);
+      if (r && r.ranked && r.near && r.near.length) {
+        list.appendChild(gapRow(r.rank - 4 > 1 ? (r.rank - 4) + ' more' : ''));
+        let prev = null;
+        r.near.forEach(e => {
+          const li = boardRow(e, e.rank, me);
+          // The gap to whoever is immediately above. A rank tells you where you
+          // are; this tells you what to do about it.
+          if (prev && me && e.name === me) {
+            const dl = li.querySelector('.dl');
+            if (dl) dl.textContent = boardDelta(prev, e);
+          }
+          prev = e;
+          list.appendChild(li);
+        });
+        note.dataset.rank = '#' + r.rank + ' of ' + r.total;
+      } else if (r && !r.ranked && r.cut) {
+        list.appendChild(gapRow(''));
+        const t = document.createElement('p');
+        t.className = 'boardTarget';
+        t.textContent = boardBy === 'lap'
+          ? 'No time here yet. ' + fmtTime(r.cut.bestLap) + ' puts you on the board.'
+          : 'Nothing banked here yet. Race this track and you are on it.';
+        list.appendChild(t);
+      }
+    }
   }
   // Players deserve to know whether they are on the world board or just their own
   // browser, otherwise a local-only score looks like a global one.
   note.textContent = online
     ? 'Global board \u00b7 everyone who plays lands here'
     : 'Saved in this browser only';
+  if (note.dataset.rank) {
+    note.textContent += ' \u00b7 you are ' + note.dataset.rank;
+    delete note.dataset.rank;
+  }
+}
+
+// One row builder for both halves of the board, so a row in the window looks
+// exactly like a row in the top twenty.
+function boardRow(e, rank, me) {
+  const li = document.createElement('li');
+  if (me && e.name === me) li.classList.add('you');
+  const main = boardBy === 'dist' ? fmtDist(e.dist)
+             : boardBy === 'hr' ? String(e.hr || 0)
+             : fmtTime(e.bestLap);
+  const sub  = boardBy === 'lap'
+    ? (CHAIRS[e.chair] ? CHAIRS[e.chair].name : '')
+    : String(e.races || 1);
+  li.innerHTML = '<span class="rk">' + rank + '</span><span class="nm"></span>' +
+                 '<span class="ch"></span><span class="dl"></span>' +
+                 '<span class="tm">' + main + '</span>';
+  li.querySelector('.nm').textContent = e.name || 'Anonymous';
+  li.querySelector('.ch').textContent = sub;
+  return li;
+}
+
+function gapRow(label) {
+  const li = document.createElement('li');
+  li.className = 'gapRow';
+  li.innerHTML = '\u00b7\u00b7\u00b7<span class="lab"></span>';
+  li.querySelector('.lab').textContent = label;
+  return li;
+}
+
+// How far ahead the person immediately above you is, in whatever the board
+// happens to measure.
+function boardDelta(above, mine) {
+  if (boardBy === 'dist') return '+' + fmtDist(Math.max(0, above.dist - mine.dist));
+  if (boardBy === 'hr') return '+' + Math.max(0, (above.hr || 0) - (mine.hr || 0));
+  const d = Math.max(0, mine.bestLap - above.bestLap);
+  return '-' + (d < 10 ? d.toFixed(2) : d.toFixed(1)) + 's';
 }
 
 const nameInput = document.getElementById('playerName');
