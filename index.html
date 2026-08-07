@@ -6743,20 +6743,31 @@ async function renderBoard() {
     if (me && !inTop) {
       const r = await Leaderboard.rank(boardMap, boardBy, me);
       if (r && r.ranked && r.near && r.near.length) {
-        list.appendChild(gapRow(r.rank - 4 > 1 ? (r.rank - 4) + ' more' : ''));
-        let prev = null;
-        r.near.forEach(e => {
-          const li = boardRow(e, e.rank, me);
-          // The gap to whoever is immediately above. A rank tells you where you
-          // are; this tells you what to do about it.
-          if (prev && me && e.name === me) {
-            const dl = li.querySelector('.dl');
-            if (dl) dl.textContent = boardDelta(prev, e);
-          }
-          prev = e;
-          list.appendChild(li);
-        });
-        note.dataset.rank = '#' + r.rank + ' of ' + r.total;
+        // The server sends three either side of you without knowing how many
+        // rows are already on screen above. Anyone ranked just past the cut has
+        // some of those three already shown, and they turned up a second time.
+        const cut = boardCut();
+        const shown = r.near.filter(e => e.rank > cut);
+        if (shown.length) {
+          // Count from the first row actually about to appear, not from your own
+          // rank, or the tally is wrong whenever the window has been trimmed.
+          const hidden = shown[0].rank - cut - 1;
+          list.appendChild(gapRow(hidden > 0 ? hidden + ' more' : ''));
+          r.near.forEach((e, i) => {
+            if (e.rank <= cut) return;
+            const li = boardRow(e, e.rank, me);
+            // The gap to whoever is immediately above. A rank tells you where you
+            // are; this tells you what to do about it. Taken from the unfiltered
+            // list, so it still works when the row above is one of the trimmed ones.
+            const prev = r.near[i - 1];
+            if (prev && me && e.name === me) {
+              const dl = li.querySelector('.dl');
+              if (dl) dl.textContent = boardDelta(prev, e);
+            }
+            list.appendChild(li);
+          });
+          note.dataset.rank = '#' + r.rank + ' of ' + r.total;
+        }
       } else if (r && !r.ranked && r.cut) {
         list.appendChild(gapRow(''));
         const t = document.createElement('p');
