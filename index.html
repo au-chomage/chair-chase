@@ -4839,6 +4839,341 @@ function updatePickups(dt) {
   }
 }
 
+// ---------- infield ----------
+// The circuits enclose a large empty floor that the camera looks straight across
+// for half of every lap. Filling it is far cheaper than filling the trackside is,
+// and for reasons worth writing down, because they are what keep it cheap:
+//
+//  - Nothing out here casts or receives a shadow. The sun frustum is SHADOW_SPAN
+//    wide and rides with the player, so most of the infield is outside it anyway;
+//    turning both flags off means even the near edge costs nothing in that pass.
+//  - Nothing out here carries a light. A PointLight is evaluated per fragment on
+//    every lit surface in the scene, which is why lampCount is already budgeted.
+//  - Nothing out here goes into `obstacles`. That array is scanned in full for
+//    every racer every frame, so a few hundred desks in it would be a real cost.
+//    The furniture sits on a fixed grid instead, which makes collision nine hash
+//    lookups regardless of how much is out there.
+//  - Everything is built from a handful of shared geometries and materials, so a
+//    whole floor of desks collapses into about eight instanced draws per chunk.
+//
+// Chunking is the part that matters most. Batched chunks are frustum culled as
+// whole spheres, so the infield is split into a coarse grid of them: at any
+// moment the camera is looking at three or four, not all fifteen.
+const INFIELD_CHUNK = 8;      // cells per side of a culling chunk
+// key -> collision radius, for the cells that hold something solid, plus the cell
+// size the keys were built at. Both are read by the collision step every frame.
+let infieldGrid = null, infieldCell = 12;
+
+// Shared stock geometry. Quantised on purpose: the batcher keys on geometry, so a
+// randomised pallet height would fragment one instanced draw into thirty.
+const PALLET_G = () => BoxG(2.4, 0.16, 2.0);
+const LOAD_G = h => BoxG(2.2, h, 1.9);
+const LOAD_H = [1.05, 1.5];
+
+function makeColumn(w, hex, h) {
+  const p = new THREE.Mesh(BoxG(w, h || 7.2, w), lam(hex));
+  p.position.y = (h || 7.2) / 2;
+  return p;
+}
+
+// A run of pallet racking spanning a whole cell, so consecutive cells join into
+// one continuous row rather than a line of separate shelves.
+function makeRacking(bays, levels) {
+  const g = new THREE.Group();
+  const frame = metal(0x6f4a2a), beam = metal(0x3f6fa0);
+  const BAY = 3.5, D = 2.4, L = bays * BAY, H = levels * 1.75 + 0.5;
+  for (let i = 0; i <= bays; i++) {
+    for (const s of [-1, 1]) {
+      const u = new THREE.Mesh(BoxG(0.18, H, 0.18), frame);
+      u.position.set(-L / 2 + i * BAY, H / 2, s * D / 2); g.add(u);
+    }
+  }
+  for (let lvl = 1; lvl <= levels; lvl++) {
+    for (const s of [-1, 1]) {
+      const b = new THREE.Mesh(BoxG(L, 0.16, 0.12), beam);
+      b.position.set(0, lvl * 1.75, s * D / 2); g.add(b);
+    }
+  }
+  for (let i = 0; i < bays; i++) {
+    const x = -L / 2 + BAY / 2 + i * BAY;
+    for (let lvl = 0; lvl < levels; lvl++) {
+      if (Math.random() < 0.3) continue;          // gaps in the stock
+      // No pallet mesh up here. A 0.16 slab tucked under a load, seen from sixty
+      // units away, is a draw call and a thousand instances for nothing.
+      const y = lvl * 1.75 + 0.08;
+      const lh = LOAD_H[Math.random() < 0.55 ? 0 : 1];
+      const load = new THREE.Mesh(LOAD_G(lh), Math.random() < 0.25 ? lam(0x8fb9d8) : cardboard());
+      load.position.set(x, y + lh / 2, 0); g.add(load);
+    }
+  }
+  return g;
+}
+
+// Floor stock: what has been picked out of the racking and not yet shipped. Uses
+// the same pallet and load geometry as the racking, so it adds no new draws.
+function makeStockStack() {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 2; j++) {
+      if (Math.random() < 0.28) continue;
+      const x = -3.2 + i * 3.2, z = -1.5 + j * 3.0;
+      const pal = new THREE.Mesh(PALLET_G(), wood(0x9a6b3a));
+      pal.position.set(x, 0.08, z); g.add(pal);
+      const lh = LOAD_H[Math.random() < 0.5 ? 0 : 1];
+      const load = new THREE.Mesh(LOAD_G(lh), Math.random() < 0.4 ? lam(0x8fb9d8) : cardboard());
+      load.position.set(x, 0.16 + lh / 2, z); g.add(load);
+      if (Math.random() < 0.4) {
+        const lh2 = LOAD_H[0];
+        const top = new THREE.Mesh(LOAD_G(lh2), cardboard());
+        top.position.set(x, 0.16 + lh + lh2 / 2, z); g.add(top);
+      }
+    }
+  }
+  return g;
+}
+
+// The office that watches the floor. Raised on legs so it clears the racking line
+// and lit from inside, which is what makes it read from the far side of the lap.
+function makeMezzanine() {
+  const g = new THREE.Group();
+  const W = 15, D = 9, FLOOR = 3.3, WALL = 2.5;
+  const steel = metal(0x5a6068), skin = lam(0xd8d3c6);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const leg = new THREE.Mesh(BoxG(0.4, FLOOR, 0.4), steel);
+    leg.position.set(sx * (W / 2 - 0.6), FLOOR / 2, sz * (D / 2 - 0.6)); g.add(leg);
+  }
+  const deck = new THREE.Mesh(BoxG(W, 0.3, D), steel);
+  deck.position.y = FLOOR + 0.15; g.add(deck);
+  for (const s of [-1, 1]) {
+    const a = new THREE.Mesh(BoxG(W, WALL, 0.16), skin);
+    a.position.set(0, FLOOR + 0.3 + WALL / 2, s * D / 2); g.add(a);
+    const b = new THREE.Mesh(BoxG(0.16, WALL, D), skin);
+    b.position.set(s * W / 2, FLOOR + 0.3 + WALL / 2, 0); g.add(b);
+    const win = new THREE.Mesh(PlaneG(W * 0.82, 1.1), glowMat(0xfff0c8, 1.9));
+    win.position.set(0, FLOOR + 0.3 + WALL * 0.58, s * (D / 2 + 0.1));
+    if (s < 0) win.rotation.y = Math.PI;
+    g.add(win);
+  }
+  const roof = new THREE.Mesh(BoxG(W + 0.4, 0.16, D + 0.4), lam(0xbdb8ab));
+  roof.position.y = FLOOR + 0.3 + WALL; g.add(roof);
+  return g;
+}
+
+// One entry per map that has an infield. `pick` runs per cell and returns what to
+// stand there, or null for a walkway. `dist` is how far that cell is from the
+// nearest waypoint, which is how the warehouse keeps its tallest steel away from
+// the track edge.
+const INFIELD = {
+  office: {
+    clear: 36,        // keep this far off the centreline; trackside scatter reaches ~30
+    cell: 12,
+    landmark: () => ({ obj: makeMeetingPod(20, 12, 3.2, true), rad: 10.5 }),
+    thin: (c, r) => !!((c + r) % 2),
+    pick(c, r) {
+      // Structural columns on their own grid, running floor to ceiling. The
+      // cheapest depth cue available: one box, one material, and they tie the
+      // floor to the ceiling so the room reads as a room.
+      if (mod(c, 3) === 0 && mod(r, 3) === 0)
+        return { obj: makeColumn(1.4, 0xe8e5dc), rad: 1.3 };
+      if (mod(c, 4) === 0) return null;                 // walkway
+      const roll = Math.random();
+      if (roll < 0.86) return { obj: makeBenchRun(), rad: 4.2 };
+      if (roll < 0.94) return { obj: makeMeetingPod(8.4, 6.4, 2.6, false), rad: 4.4 };
+      return { obj: makeBigPlant(), rad: 1.6 };
+    }
+  },
+  warehouse: {
+    clear: 34,
+    // Racking spans the full cell, so the cell size is also the length of a rack
+    // run and neighbouring cells butt together into a continuous row.
+    cell: 14,
+    landmark: () => ({ obj: makeMezzanine(), rad: 9.5 }),
+    thin: (c, r) => mod(r, 2) === 1,
+    pick(c, r, dist) {
+      if (mod(c, 5) === 0) return null;                 // cross aisle
+      if (mod(c, 6) === 3 && mod(r, 5) === 0)
+        return { obj: makeColumn(1.6, 0xb9bcc2), rad: 1.4 };
+      // A low apron nearest the track. Five metres of steel starting right at the
+      // barrier walls the circuit in; letting the stock rise as it goes back gives
+      // the eye somewhere to travel and keeps the far racking readable.
+      const roll = Math.random();
+      if (dist < 62) {
+        if (roll < 0.60) return { obj: makeStockStack(), rad: 4.2 };
+        if (roll < 0.82) return { obj: makeRacking(4, 2), rad: 4.8 };
+        if (roll < 0.90) return { obj: makeForklift(), rad: 2.4 };
+        return null;
+      }
+      if (roll < 0.86) return { obj: makeRacking(4, 3), rad: 4.8 };
+      if (roll < 0.95) return { obj: makeStockStack(), rad: 4.2 };
+      return { obj: makeForklift(), rad: 2.4 };
+    }
+  }
+};
+// Floor-mod, so the pattern does not flip sign either side of the origin.
+function mod(a, n) { return ((a % n) + n) % n; }
+
+function insideCircuit(x, z) {
+  let inside = false;
+  for (let i = 0, j = WP_COUNT - 1; i < WP_COUNT; j = i++) {
+    const a = waypoints[i], b = waypoints[j];
+    if ((a.z > z) !== (b.z > z) &&
+        x < (b.x - a.x) * (z - a.z) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+// A run of four workstations sharing one desk slab and one screen spine. Built as
+// a run rather than as four separate cubicles because it is the same picture from
+// forty units away for well under half the meshes.
+function makeBenchRun() {
+  const g = new THREE.Group();
+  const L = 9.2;
+  const dark = lam(0x33353c);
+  const top = new THREE.Mesh(BoxG(L, 0.12, 2.8), wood(0x9c7248));
+  top.position.y = 1.44; g.add(top);
+  // Rises 0.4 above the desk slab, so the run reads as a bench with a screen
+  // rather than a floating plank. Nothing else out here is taller than this.
+  const spine = new THREE.Mesh(BoxG(L, 1.9, 0.1), lam(0x8a7f6c));
+  spine.position.y = 0.95; g.add(spine);
+  for (const s of [-1, 1]) {
+    const leg = new THREE.Mesh(BoxG(0.14, 1.38, 2.4), dark);
+    leg.position.set(s * (L / 2 - 0.5), 0.72, 0); g.add(leg);
+  }
+  // Every monitor is the same cool blue on purpose. A sea of identical screens
+  // reads better at distance than five tints do, and costs one material.
+  const screenMat = glowMat(0x2f6f9f, 1.9);
+  const shirts = [0xf0f2f4, 0x5b6c8f, 0xc76b8a];
+  for (let k = 0; k < 4; k++) {
+    const s = k < 2 ? -1 : 1;                 // two facing each way across the spine
+    const x = ((k % 2) ? 1 : -1) * 2.3;
+    const mon = new THREE.Mesh(BoxG(1.0, 0.6, 0.07), screenMat);
+    mon.position.set(x, 1.86, s * 0.5); g.add(mon);
+    const chair = new THREE.Mesh(BoxG(0.9, 1.5, 0.9), dark);
+    chair.position.set(x, 0.75, s * 2.5); g.add(chair);
+    // Roughly half the desks are empty, which is both cheaper and truer to an
+    // office at any given moment.
+    if (Math.random() < 0.55) {
+      const shirt = cloth(shirts[Math.floor(Math.random() * shirts.length)]);
+      const torso = new THREE.Mesh(BoxG(0.8, 0.95, 0.42), shirt);
+      torso.position.set(x, 1.8, s * 2.3); g.add(torso);
+      const head = new THREE.Mesh(BoxG(0.44, 0.44, 0.42), lam(0xe8b48c));
+      head.position.set(x, 2.45, s * 2.3); g.add(head);
+    }
+  }
+  return g;
+}
+
+// Opaque frosted panels rather than glass. Transparency would mean sort order and
+// a second pass over the same pixels, for a look nobody can resolve from the track.
+function makeMeetingPod(w, d, h, sign) {
+  const g = new THREE.Group();
+  const wall = lam(0xd8d3c6);
+  for (const s of [-1, 1]) {
+    const a = new THREE.Mesh(BoxG(w, h, 0.14), wall);
+    a.position.set(0, h / 2, s * d / 2); g.add(a);
+    const b = new THREE.Mesh(BoxG(0.14, h, d), wall);
+    b.position.set(s * w / 2, h / 2, 0); g.add(b);
+  }
+  const roof = new THREE.Mesh(BoxG(w, 0.12, d), lam(0xbdb8ab));
+  roof.position.y = h; g.add(roof);
+  const table = new THREE.Mesh(BoxG(w * 0.5, 0.12, d * 0.34), wood(0x9c7248));
+  table.position.y = 1.4; g.add(table);
+  if (sign) {
+    const s1 = new THREE.Mesh(PlaneG(w * 0.44, 0.5), glowMat(0x5ce8f2, 1.9));
+    s1.position.set(0, h * 0.72, d / 2 + 0.09); g.add(s1);
+    const s2 = s1.clone(); s2.position.z = -d / 2 - 0.09; s2.rotation.y = Math.PI; g.add(s2);
+  }
+  return g;
+}
+
+function buildInfield(mapKey, batcher) {
+  infieldGrid = null;
+  const CFG = INFIELD[mapKey];
+  if (!CFG) return;
+
+  const C = CFG.cell;
+  infieldCell = C;
+  // Cells within `clear` of any waypoint are off limits. Marking them from the
+  // waypoints costs a few thousand operations; testing every cell against every
+  // waypoint would cost a few hundred thousand.
+  const near = new Set();
+  const span = Math.ceil(CFG.clear / C);
+  let minC = 1e9, maxC = -1e9, minR = 1e9, maxR = -1e9;
+  for (let i = 0; i < WP_COUNT; i++) {
+    const w = waypoints[i];
+    const c0 = Math.round(w.x / C), r0 = Math.round(w.z / C);
+    if (c0 < minC) minC = c0; if (c0 > maxC) maxC = c0;
+    if (r0 < minR) minR = r0; if (r0 > maxR) maxR = r0;
+    for (let c = c0 - span; c <= c0 + span; c++) {
+      for (let r = r0 - span; r <= r0 + span; r++) {
+        const dx = c * C - w.x, dz = r * C - w.z;
+        if (dx * dx + dz * dz < CFG.clear * CFG.clear) near.add(c + ',' + r);
+      }
+    }
+  }
+
+  const grid = new Map();
+  const thin = lowDetailWorld();
+  const cells = [];
+  for (let c = minC; c <= maxC; c++) {
+    for (let r = minR; r <= maxR; r++) {
+      if (near.has(c + ',' + r)) continue;
+      if (!insideCircuit(c * C, r * C)) continue;
+      cells.push([c, r]);
+    }
+  }
+  if (!cells.length) return;
+
+  // How far each cell sits from the track, measured once. The landmark goes to the
+  // deepest one, which is the spot visible from the most of the lap, and the maps
+  // that tier their content by depth read the same number.
+  let best = null, bestD = -1;
+  const depth = new Map();
+  for (const [c, r] of cells) {
+    let d = 1e9;
+    for (let i = 0; i < WP_COUNT; i += 4) {
+      const w = waypoints[i];
+      const dx = c * C - w.x, dz = r * C - w.z;
+      const dd = dx * dx + dz * dz;
+      if (dd < d) d = dd;
+    }
+    depth.set(c + ',' + r, Math.sqrt(d));
+    if (d > bestD) { bestD = d; best = c + ',' + r; }
+  }
+
+  // The boardroom is wider than one cell, so its neighbours are reserved rather
+  // than left to fill up with desks standing inside its walls.
+  const taken = new Set();
+  if (best) {
+    const [bc, br] = best.split(',').map(Number);
+    for (let c = bc - 1; c <= bc + 1; c++)
+      for (let r = br - 1; r <= br + 1; r++) taken.add(c + ',' + r);
+  }
+
+  for (const [c, r] of cells) {
+    const key = c + ',' + r;
+    if (key !== best && taken.has(key)) continue;
+    const x = c * C, z = r * C;
+    const chunk = 'inf' + Math.floor(c / INFIELD_CHUNK) + '_' + Math.floor(r / INFIELD_CHUNK);
+
+    let put;
+    if (key === best) put = CFG.landmark();
+    // Phones get half the floor. How it is halved is per map: a checkerboard is
+    // fine for desks and would saw the warehouse racking into stubs, so that one
+    // drops whole rows and keeps its runs continuous.
+    else if (thin && CFG.thin(c, r)) continue;
+    else put = CFG.pick(c, r, depth.get(key) || 0);
+    if (!put || !put.obj) continue;
+
+    const obj = put.obj, rad = put.rad;
+    obj.position.x += x; obj.position.z += z;
+    obj.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    batcher.add(obj, chunk);
+    grid.set(key, rad);
+  }
+  infieldGrid = grid;
+}
+
 function buildScene(mapKey) {
   skyDome = null;   // cleared here: the dome is created further down this function
   const M = MAPS[mapKey];
@@ -4978,6 +5313,7 @@ function buildScene(mapKey) {
   chevrons = [];
   batchChunks = [];
   contactSpots = [];
+  infieldGrid = null;
 
   const wallMat = mapKey === 'startup' ? new THREE.MeshLambertMaterial({ map: (() => { const t = brickTexture('#8a4b3a'); t.repeat.set(2, 1); return t; })() }) : felt(M.wall);
   const wallTrim = wood(0x8f8371);
@@ -5097,6 +5433,10 @@ function buildScene(mapKey) {
   }
 
   decorate(mapKey, batcher, CHUNK);
+  // The middle of the circuit. Same rule as theming: it has to land before the
+  // flush, and it deliberately adds nothing to contactSpots, since a contact
+  // shadow forty units away is a plane nobody can see.
+  buildInfield(mapKey, batcher);
   // Theming must land before the flush, or anything it batches goes into a
   // batcher that has already been emptied into the scene. It also has to precede
   // buildContactShadows() further down, which consumes contactSpots.
@@ -5970,6 +6310,29 @@ function updateRacer(r, dt, controlsOn) {
 
   // rooftop wind gusts push racers sideways
   if (windZone) { const dx = r.pos.x - windZone.x, dz = r.pos.z - windZone.z; if (dx * dx + dz * dz < windZone.r * windZone.r) { const gust = Math.sin(elapsed * 1.7) * windZone.strength * dt; r.pos.x += windZone.nx * gust; r.pos.z += windZone.nz * gust; } }
+
+  // Infield furniture. On a fixed grid, so this is nine hash lookups rather than
+  // several hundred more entries in the obstacle scan below. Circles round each
+  // cell are plenty: nothing out here is on the racing line, and anyone this far
+  // in has already given up the lap.
+  if (!airborne && infieldGrid) {
+    const c0 = Math.round(r.pos.x / infieldCell), r0 = Math.round(r.pos.z / infieldCell);
+    for (let c = c0 - 1; c <= c0 + 1; c++) {
+      for (let rr = r0 - 1; rr <= r0 + 1; rr++) {
+        const rad = infieldGrid.get(c + ',' + rr);
+        if (!rad) continue;
+        const ox = c * infieldCell, oz = rr * infieldCell;
+        const dx = r.pos.x - ox, dz = r.pos.z - oz;
+        const hit = rad + 1.1, d2 = dx * dx + dz * dz;
+        if (d2 < hit * hit && d2 > 0.0001) {
+          const d = Math.sqrt(d2);
+          r.pos.x = ox + dx / d * hit;
+          r.pos.z = oz + dz / d * hit;
+          r.speed *= 0.45;
+        }
+      }
+    }
+  }
 
   if (!airborne) for (const o of obstacles) {
     const dx = r.pos.x - o.position.x, dz = r.pos.z - o.position.z;
