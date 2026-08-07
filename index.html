@@ -346,7 +346,18 @@
   /* ---- multiplayer lobby ---- */
   /* The room code is the whole feature, so it gets to be the biggest thing on
      the screen after the wordmark. Everything else here is deliberately quiet. */
+  /* The default screen scrim is 93% opaque, which is right for a menu sitting
+     over a blurred backdrop and wrong for a room you are meant to be standing
+     in. Heavy at the top where the wordmark and the code need contrast, then
+     opening up towards the floor so the room is actually visible. Everything low
+     down — the roster rows and the buttons — carries its own fill already. */
+  #lobby { background:linear-gradient(180deg,
+      rgba(9,14,17,.94) 0%, rgba(9,14,17,.90) 30%,
+      rgba(9,14,17,.62) 58%, rgba(9,14,17,.30) 82%, rgba(9,14,17,.20) 100%); }
   #lobby .brand { margin-bottom:18px; }
+  /* Bare text over a room needs its own contrast now that the scrim is thinner. */
+  .lobbyNote { text-shadow:0 1px 4px rgba(0,0,0,.85); }
+  .roomCode .lab { text-shadow:0 1px 3px rgba(0,0,0,.8); }
   .roomCode { display:flex; align-items:center; gap:14px; margin-bottom:6px; }
   .roomCode .lab { font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:#7fa3ab; }
   .roomCode .code { font-size:clamp(30px,6vw,46px); letter-spacing:10px; font-style:italic;
@@ -3023,19 +3034,21 @@ function buildBreakRoom() {
 
   // Hard floor over the carpet, because a break room has lino in it and the
   // change of surface underfoot is half of what says "different room".
-  const lino = new THREE.Mesh(PlaneG(13, 11), lam(0xd9d5cb));
+  const lino = new THREE.Mesh(PlaneG(24, 14), lam(0xd9d5cb));
   lino.rotation.x = -Math.PI/2; lino.position.set(0, 0.02, -0.4); lino.receiveShadow = true;
   g.add(lino);
-  for (let i = -5; i <= 5; i++) {                       // grout lines
-    const ln = new THREE.Mesh(PlaneG(0.03, 11), lam(0xbdb8ac));
+  for (let i = -9; i <= 9; i++) {                       // grout lines
+    const ln = new THREE.Mesh(PlaneG(0.03, 14), lam(0xbdb8ac));
     ln.rotation.x = -Math.PI/2; ln.position.set(i * 1.2, 0.025, -0.4); g.add(ln);
   }
 
   const wallM = lam(0xd6cdb8);
-  const back = new THREE.Mesh(PlaneG(13, 6), wallM);
-  back.position.set(0, 3, -3.4); g.add(back);
-  const left = new THREE.Mesh(PlaneG(11, 6), wallM);
-  left.rotation.y = Math.PI/2; left.position.set(-5.6, 3, -0.4); g.add(left);
+  const back = new THREE.Mesh(PlaneG(24, 7), wallM);
+  back.position.set(0, 3.5, -3.4); g.add(back);
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(PlaneG(14, 7), wallM);
+    side.rotation.y = sx * Math.PI/2; side.position.set(sx * -7.2, 3.5, -0.4); g.add(side);
+  }
   // Tiled splashback behind the counter. Small thing, but a kitchen wall does
   // not look like an office wall and the eye knows it.
   const splash = new THREE.Mesh(PlaneG(4.6, 1.4), lam(0xe8eef0));
@@ -3089,6 +3102,97 @@ function buildBreakRoom() {
     new THREE.MeshBasicMaterial({ map: eotmTex || null, color: eotmTex ? 0xffffff : 0xf2ece0 }));
   breakEotm.position.set(1.45, 2.35, -3.31); breakEotm.rotation.z = -0.03; g.add(breakEotm);
 
+  // --- the clutter ---
+  // A counter with nothing on it is a shape. Everything below is small, cheap,
+  // and doing the actual work of making the room look used rather than issued.
+
+  // Worktop running along the back wall, so the machines are not standing on
+  // bare floor.
+  const top = new THREE.Mesh(BoxG(5.6, 0.12, 0.85), lam(0xdfd8c8));
+  top.position.set(-2.3, 1.0, -2.95); g.add(top);
+  const carcass = new THREE.Mesh(BoxG(5.5, 0.95, 0.78), lam(0x8fa3a8));
+  carcass.position.set(-2.3, 0.48, -2.95); g.add(carcass);
+  for (const dx of [-1.9, -0.6, 0.7, 1.9]) {
+    const door = new THREE.Mesh(BoxG(1.15, 0.8, 0.04), lam(0x9db1b6));
+    door.position.set(-2.3 + dx, 0.5, -2.55); g.add(door);
+    const hdl = new THREE.Mesh(BoxG(0.36, 0.05, 0.05), metal(0xb9c0c6));
+    hdl.position.set(-2.3 + dx, 0.82, -2.52); g.add(hdl);
+  }
+
+  // Kettle, and a microwave that has seen things.
+  // Little helper: a mesh at a spot. Setting position rather than replacing it,
+  // because Three holds a reference to that vector.
+  const at = (geo, mat, x, y, z) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    return m;
+  };
+
+  const kettle = new THREE.Group();
+  kettle.add(at(CylG(0.17, 0.2, 0.34, 12), metal(0xd8dde1), 0, 0.17, 0));
+  kettle.add(at(CylG(0.12, 0.12, 0.05, 12), lam(0x2b2e34), 0, 0.36, 0));
+  kettle.position.set(-0.35, 1.06, -2.9); g.add(kettle);
+
+  const micro = new THREE.Group();
+  micro.add(at(BoxG(0.9, 0.52, 0.62), lam(0xe4e2dc), 0, 0.26, 0));
+  micro.add(at(BoxG(0.55, 0.34, 0.03), lam(0x23262b), -0.12, 0.28, 0.32));
+  micro.position.set(0.75, 1.06, -2.9); g.add(micro);
+
+  // Mugs. Nobody has washed any of them up.
+  const mugCols = [0xece7dd, 0xd8624f, 0x4f7fb8, 0xe0b84f, 0x6f9f6f];
+  for (let i = 0; i < 5; i++) {
+    const m = new THREE.Mesh(CylG(0.11, 0.1, 0.2, 10), lam(mugCols[i]));
+    m.position.set(-4.3 + i * 0.28, 1.16, -2.85 + (i % 2) * 0.14);
+    g.add(m);
+  }
+  // And a stack of paper cups by the cooler, because the mugs are all dirty.
+  for (let i = 0; i < 5; i++) {
+    const c = new THREE.Mesh(CylG(0.09, 0.07, 0.05, 10), lam(0xf1efe8));
+    c.position.set(2.4, 1.35 + i * 0.042, -2.55); g.add(c);
+  }
+
+  // Wall clock, permanently four minutes fast.
+  // Only the face needs turning to look at the room. Rotating the whole group
+  // would take the hands with it, which is what I did first and it pointed the
+  // clock at the ceiling.
+  const clock = new THREE.Group();
+  const face = at(CylG(0.34, 0.34, 0.05, 18), lam(0xf4f1ea), 0, 0, 0);
+  face.rotation.x = Math.PI / 2; clock.add(face);
+  clock.add(at(TorusG(0.34, 0.03, 6, 20), lam(0x2b2e34), 0, 0, 0.01));
+  for (const [len, ang, w] of [[0.22, 1.9, 0.035], [0.15, 4.4, 0.045]]) {
+    const h = at(BoxG(w, len, 0.02), lam(0x23262b),
+                 Math.sin(ang) * len / 2, Math.cos(ang) * len / 2, 0.05);
+    h.rotation.z = -ang; clock.add(h);
+  }
+  clock.position.set(-0.9, 3.1, -3.32);
+  g.add(clock);
+
+  // Signage. The voice of the room.
+  const sign = (w, h, x, y, col) => {
+    const b = new THREE.Mesh(PlaneG(w, h), lam(col));
+    b.position.set(x, y, -3.33); g.add(b);
+    return b;
+  };
+  sign(1.0, 0.62, -4.2, 2.5, 0xf3efe2);      // laminated notice, curling
+  sign(0.7, 0.5, 3.6, 2.6, 0xfdf6c9);        // a rota nobody follows
+  sign(0.5, 0.36, 4.4, 1.9, 0xd9ecf7);
+
+  // Strip lights, so the ceiling is not a void.
+  for (const x of [-3.2, 0.4, 3.6]) {
+    const strip = new THREE.Mesh(BoxG(2.6, 0.08, 0.34),
+      new THREE.MeshBasicMaterial({ color: 0xfff6e2 }));
+    strip.position.set(x, 4.5, -1.4); g.add(strip);
+    const housing = new THREE.Mesh(BoxG(2.75, 0.1, 0.45), lam(0xd3d6da));
+    housing.position.set(x, 4.58, -1.4); g.add(housing);
+  }
+
+  put(makeCoatRack(), 5.0, -0.6, -0.3);
+  // A bin that is slightly too full.
+  const bin = new THREE.Group();
+  bin.add(at(CylG(0.32, 0.26, 0.7, 12), lam(0x4a4f55), 0, 0.35, 0));
+  bin.add(at(SphG(0.2, 8, 6), lam(0xe8e4d8), 0.04, 0.76, 0));
+  put(bin, -0.9, -2.35, 0);
+
   // Where the chairs park. Kept as its own group so the roster can be rebuilt
   // without disturbing the room around it.
   parkGroup = new THREE.Group();
@@ -3114,8 +3218,12 @@ function buildBreakRoom() {
 // rows, offset so nobody is directly behind anybody — which is also just how a
 // room with eight people in it actually looks.
 const PARK_GAP = 1.45;
+// Front row sits well forward of the counter. At the title screen's distance
+// that puts a chair at about a fifth of the frame height — near enough to the
+// showcase chair to read as the same game, without a headrest filling the shot.
+const PARK_FRONT = 2.2, PARK_BACK = 0.6;
 function parkSpot(i, n) {
-  if (n === 1) return { x: 0, z: 0.9, turn: -0.15 };
+  if (n === 1) return { x: 0, z: PARK_FRONT, turn: -0.15 };
   const rows = n > 4 ? 2 : 1;
   const front = Math.ceil(n / rows);
   const row = i < front ? 0 : 1;
@@ -3123,7 +3231,7 @@ function parkSpot(i, n) {
   const count = row === 0 ? front : n - front;
   // Half a gap of offset on the back row, so the two rows interleave.
   const x = (inRow - (count - 1) / 2) * PARK_GAP + (row ? PARK_GAP * 0.5 : 0);
-  const z = row ? -0.5 : 1.0;
+  const z = row ? PARK_BACK : PARK_FRONT;
   const t = count === 1 ? 0 : (inRow / (count - 1) - 0.5);
   return { x, z, turn: t * 0.7 - 0.15 };
 }
@@ -6517,12 +6625,23 @@ function animate() {
       }
       // A drift rather than a turntable: this is a room you are standing in, not
       // a product on a plinth.
-      const dx = Math.sin(elapsed * 0.11) * 0.55;
-      const dy = 2.55 + Math.sin(elapsed * 0.17) * 0.06;
+      // Far enough back to be a room rather than a chair. At eight units you are
+      // looking at somebody's headrest; the props, the counter and the walls only
+      // start to read from about twelve.
+      // Matched to the title screen: eye height, nearly level, close enough that
+      // the room fills the frame. Standing back to twelve and looking down from
+      // three and a half turned it into a floorplan — most of the picture was
+      // empty lino and empty ceiling, and everything worth seeing was small and
+      // far away.
+      const dx = Math.sin(elapsed * 0.11) * 0.6;
+      const dy = 2.95 + Math.sin(elapsed * 0.17) * 0.06;
       mCam.position.x += (dx - mCam.position.x) * Math.min(dt * 1.2, 1);
       mCam.position.y += (dy - mCam.position.y) * Math.min(dt * 1.2, 1);
-      mCam.position.z += (8.1 - mCam.position.z) * Math.min(dt * 1.2, 1);
-      mCam.lookAt(mCam.position.x * 0.35, 1.35, -0.6);
+      mCam.position.z += (9.6 - mCam.position.z) * Math.min(dt * 1.2, 1);
+      // Barely tilted down, the way the title screen looks at the desk. The
+      // chairs land in the lower middle, under the roster, with the counter and
+      // the back wall behind the text.
+      mCam.lookAt(mCam.position.x * 0.3, 1.85, -1.2);
       Post.render(mScene, mCam);
       return;
     }
