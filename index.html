@@ -3032,6 +3032,14 @@ function buildBreakRoom() {
   if (breakSet) return breakSet;
   const g = new THREE.Group();
 
+  // A mesh at a spot. Position is set rather than replaced, because Three holds
+  // a reference to that vector.
+  const at = (geo, mat, x, y, z) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    return m;
+  };
+
   // Hard floor over the carpet, because a break room has lino in it and the
   // change of surface underfoot is half of what says "different room".
   const lino = new THREE.Mesh(PlaneG(24, 14), lam(0xd9d5cb));
@@ -3102,6 +3110,96 @@ function buildBreakRoom() {
     new THREE.MeshBasicMaterial({ map: eotmTex || null, color: eotmTex ? 0xffffff : 0xf2ece0 }));
   breakEotm.position.set(1.45, 2.35, -3.31); breakEotm.rotation.z = -0.03; g.add(breakEotm);
 
+  // --- the walls and the ceiling ---
+  // The side walls run towards the camera, so they take up more of the picture
+  // than the back wall does, and bare they read as two grey slabs. The ceiling
+  // was worse: an unlit void above everything.
+
+  const ceil = new THREE.Mesh(PlaneG(24, 14), lam(0xeceae4));
+  ceil.rotation.x = Math.PI/2; ceil.position.set(0, 4.9, -0.4); g.add(ceil);
+
+  // Skirting and a dado rail. Two thin boxes that cost nothing and stop a wall
+  // reading as a blank plane.
+  const trim = (w, h, x, y, z, ry, col) => {
+    const m = new THREE.Mesh(BoxG(w, h, 0.06), lam(col));
+    m.position.set(x, y, z); if (ry) m.rotation.y = ry; g.add(m);
+  };
+  trim(24, 0.22, 0, 0.11, -3.36, 0, 0xb9b3a6);
+  trim(24, 0.09, 0, 1.45, -3.36, 0, 0xc6bfae);
+  for (const sx of [-1, 1]) {
+    trim(14, 0.22, sx * 7.16, 0.11, -0.4, Math.PI/2, 0xb9b3a6);
+    trim(14, 0.09, sx * 7.16, 1.45, -0.4, Math.PI/2, 0xc6bfae);
+  }
+
+  // Anything hung on a side wall. Placed just proud of it and turned to face in.
+  const onWall = (sx, mesh, y, z) => {
+    mesh.position.set(sx * 7.12, y, z);
+    mesh.rotation.y = sx * -Math.PI/2;
+    g.add(mesh);
+    return mesh;
+  };
+
+  // Left wall: windows. The single best thing you can put on an empty wall —
+  // they bring light, depth and a reason for the room to exist.
+  for (const wz of [-1.6, 1.4]) {
+    const frame = new THREE.Mesh(PlaneG(2.6, 1.9), lam(0xe8e4da));
+    onWall(-1, frame, 2.5, wz);
+    const glass = new THREE.Mesh(PlaneG(2.3, 1.6),
+      new THREE.MeshBasicMaterial({ color: 0xbcd8e6 }));
+    onWall(-1, glass, 2.5, wz).position.x = -7.09;
+    // A hint of outside rather than a flat blue panel.
+    const sky = new THREE.Mesh(PlaneG(2.3, 0.55), new THREE.MeshBasicMaterial({ color: 0xdcecf4 }));
+    onWall(-1, sky, 3.05, wz).position.x = -7.08;
+    const far = new THREE.Mesh(PlaneG(2.3, 0.5), new THREE.MeshBasicMaterial({ color: 0x9fb7c4 }));
+    onWall(-1, far, 2.15, wz).position.x = -7.08;
+    // Blinds, half raised, because nobody ever agrees about the blinds.
+    for (let i = 0; i < 5; i++) {
+      const slat = new THREE.Mesh(PlaneG(2.3, 0.07), lam(0xf2efe8));
+      onWall(-1, slat, 3.28 - i * 0.13, wz).position.x = -7.06;
+    }
+    const sill = new THREE.Mesh(BoxG(0.3, 0.08, 2.7), lam(0xe0dbd0));
+    sill.position.set(-7.0, 1.52, wz); g.add(sill);
+    // A radiator under each, which is where the office cardigan lives.
+    const rad = new THREE.Mesh(BoxG(0.16, 0.7, 2.2), lam(0xe9e6df));
+    rad.position.set(-7.0, 0.75, wz); g.add(rad);
+    for (let i = 0; i < 9; i++) {
+      const fin = new THREE.Mesh(BoxG(0.19, 0.66, 0.06), lam(0xdedad2));
+      fin.position.set(-6.99, 0.75, wz - 1.0 + i * 0.25); g.add(fin);
+    }
+  }
+
+  // Right wall: the noticeboard nobody reads, and the safety kit everybody
+  // ignores until they need it.
+  const notice = new THREE.Mesh(PlaneG(3.0, 1.9), wood(0x8a6a44));
+  onWall(1, notice, 2.6, -0.8);
+  const noticeCork = new THREE.Mesh(PlaneG(2.8, 1.7), lam(0xc9a06a));
+  onWall(1, noticeCork, 2.6, -0.8).position.x = 7.09;
+  const paperCols = [0xf6f2e6, 0xfdf6c9, 0xd9ecf7, 0xffd7d7, 0xf6f2e6, 0xe6f7e0];
+  for (let i = 0; i < 6; i++) {
+    const sheet = new THREE.Mesh(PlaneG(0.62, 0.46), lam(paperCols[i]));
+    onWall(1, sheet, 3.05 - Math.floor(i / 3) * 0.72, -1.65 + (i % 3) * 0.82);
+    sheet.position.x = 7.07;
+    // Pinned by somebody in a hurry.
+    sheet.rotation.z = (i % 2 ? 1 : -1) * 0.04;
+  }
+
+  const ext = new THREE.Group();
+  ext.add(at(CylG(0.13, 0.13, 0.62, 10), lam(0xb0322f), 0, 0.31, 0));
+  ext.add(at(CylG(0.05, 0.05, 0.12, 8), metal(0x9aa0a8), 0, 0.68, 0));
+  ext.position.set(7.0, 0.9, 2.2); g.add(ext);
+
+  const exitSign = new THREE.Mesh(PlaneG(0.8, 0.3), new THREE.MeshBasicMaterial({ color: 0x4fbf6a }));
+  onWall(1, exitSign, 3.9, 3.4);
+
+  // Strip lights nearer the camera too, so the ceiling is lit all the way
+  // forward rather than only over the counter.
+  for (const z of [1.6]) for (const x of [-3.2, 0.4, 3.6]) {
+    const strip = new THREE.Mesh(BoxG(2.6, 0.08, 0.34), new THREE.MeshBasicMaterial({ color: 0xfff6e2 }));
+    strip.position.set(x, 4.72, z); g.add(strip);
+    const housing = new THREE.Mesh(BoxG(2.75, 0.1, 0.45), lam(0xd3d6da));
+    housing.position.set(x, 4.8, z); g.add(housing);
+  }
+
   // --- the clutter ---
   // A counter with nothing on it is a shape. Everything below is small, cheap,
   // and doing the actual work of making the room look used rather than issued.
@@ -3120,14 +3218,6 @@ function buildBreakRoom() {
   }
 
   // Kettle, and a microwave that has seen things.
-  // Little helper: a mesh at a spot. Setting position rather than replacing it,
-  // because Three holds a reference to that vector.
-  const at = (geo, mat, x, y, z) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    return m;
-  };
-
   const kettle = new THREE.Group();
   kettle.add(at(CylG(0.17, 0.2, 0.34, 12), metal(0xd8dde1), 0, 0.17, 0));
   kettle.add(at(CylG(0.12, 0.12, 0.05, 12), lam(0x2b2e34), 0, 0.36, 0));
