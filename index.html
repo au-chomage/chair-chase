@@ -839,6 +839,8 @@ const LOGO_URI="data:image/webp;base64,UklGRmwyAgBXRUJQVlA4WAoAAAAQAAAAHwMA1gEAQ
 const Sound = (() => {
   let ready = false, unlocked = false, starting = false, raceMode = false, step = 0;
   let master, chords, bass, hat, lead, blip, click, noise, thud, crowdGain;
+  let roll, rollFilt, rollGain, rollVerb, rollAm, rollLfo, rollLfo2;
+  let rollLvl = 0, rollCut = 0, rollRate = 0, surf = null, floorScale = 1;
   let verb, verbSend, chorus, kick, brush;
   // ii-V-I-VI in C, a jazzy corporate-muzak turnaround.
   // walk[] is a proper walking bass line: root, chord tones, then a chromatic
@@ -850,6 +852,42 @@ const Sound = (() => {
     { bass: 'C2', chord: ['E3','G3','B3','D4'],  walk: ['C3','B2','G2','Bb2'] },
     { bass: 'A2', chord: ['E3','G3','Db4','G4'], walk: ['A2','G2','E2','Eb2'] }
   ];
+  // What the floor sounds like under a set of castors.
+  //
+  // Four surfaces, all built from the same noise source with a different colour,
+  // a different filter sweep and a different amount of the room. Carpet swallows
+  // everything; lino is all top end; concrete has a rumble to it; the car park
+  // deck is hard and rings.
+  //
+  // This is the one sound in the game that never stops while you are moving, so
+  // it is also the one most able to grate. Everything here is deliberately quiet
+  // and dull-edged — it should register as texture rather than as a sound
+  // effect, and you should mostly notice it when it changes.
+  // First attempt at this was a filtered noise bed whose cutoff tracked speed,
+  // and it sounded like wind past your ear — because that is what it was.
+  // Broadband noise with a slow sweep is air. Castors are not air: they are a
+  // fast train of tiny impacts as the wheel crosses carpet loops and floor
+  // grain, and the cue your ear uses for "rolling" is how quickly those impacts
+  // arrive, not how bright the hiss is.
+  //
+  // So: band-limited rather than low-passed, so there is no broad hiss to read
+  // as air; amplitude chopped at a rate that tracks speed, which is what makes
+  // it granular; and a good deal quieter than before.
+  //
+  //   band/q   where the material sits and how narrow it is
+  //   rate     impacts per second at a standstill and at full speed
+  //   depth    how much of the signal the chop removes; more reads as rougher
+  const SURFACES = {
+    // Loop pile: low, soft, and almost no top end at all.
+    carpet:   { noise: 'brown', lo: 180, hi:  520, q: 1.1, lvl: 0.030, verb: 0.04, rate: [11, 34], depth: 0.30 },
+    // Hard smooth floor: higher and finer, but still a band rather than a hiss.
+    lino:     { noise: 'pink',  lo: 520, hi: 1700, q: 1.6, lvl: 0.024, verb: 0.10, rate: [17, 62], depth: 0.45 },
+    // Sealed concrete: mid-heavy, with a rumble under it.
+    concrete: { noise: 'pink',  lo: 300, hi: 1150, q: 1.3, lvl: 0.034, verb: 0.09, rate: [13, 44], depth: 0.42 },
+    // Deck seams: the roughest of the four, and the only one that rings.
+    deck:     { noise: 'pink',  lo: 380, hi: 1500, q: 1.8, lvl: 0.032, verb: 0.20, rate: [12, 40], depth: 0.60 },
+  };
+
   // Tiny velocity jitter so repeated bars are not bit-identical.
   const hum = (v, amt) => v + (Math.random() - 0.5) * (amt || 0.1);
   function build() {
@@ -877,6 +915,31 @@ const Sound = (() => {
     hat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.04, sustain: 0 } }).connect(master);
     hat.volume.value = -29;
     hat.connect(verbSend);
+
+    // The floor. One continuous noise source, filtered by speed. It runs for the
+    // whole session and is silenced with its gain rather than being started and
+    // stopped, because restarting a noise source clicks.
+    rollGain = new Tone.Gain(0).connect(master);
+    rollVerb = new Tone.Gain(0).connect(verbSend);
+    // Bandpass, not lowpass. A lowpass leaves everything below the cutoff, which
+    // is a broad wash; a band leaves only the part that sounds like the material.
+    rollFilt = new Tone.Filter({ type: 'bandpass', frequency: 300, Q: 1.2 });
+    rollFilt.connect(rollGain);
+    rollFilt.connect(rollVerb);
+    // The chop. A sawtooth riding the gain at a speed-dependent rate turns a
+    // smooth bed into a stream of grains, which is the whole difference between
+    // wind and wheels. Two of them, slightly detuned, so it never settles into a
+    // steady pitch and start buzzing like an engine.
+    rollAm = new Tone.Gain(1);
+    rollAm.connect(rollFilt);
+    rollLfo = new Tone.LFO({ frequency: 20, min: 0.6, max: 1, type: 'sawtooth' });
+    rollLfo2 = new Tone.LFO({ frequency: 27, min: 0.75, max: 1, type: 'triangle' });
+    rollLfo.connect(rollAm.gain);
+    rollLfo2.connect(rollAm.gain);
+    try { rollLfo.start(); rollLfo2.start(); } catch (e) {}
+    roll = new Tone.Noise('brown').connect(rollAm);
+    roll.volume.value = -6;
+    try { roll.start(); } catch (e) {}
     lead = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.02, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(master);
     lead.volume.value = -20;
     lead.connect(verbSend);
@@ -958,6 +1021,9 @@ const Sound = (() => {
       if (!ready) return;
       raceMode = (m === 'race');
       try { Tone.Transport.bpm.rampTo(raceMode ? 142 : 104, 0.6); crowdGain.gain.rampTo(raceMode ? 0.03 : 0, 0.8); } catch (e) {}
+      // Leaving the track takes the floor with it. Without this the carpet keeps
+      // hissing quietly over the results screen.
+      if (!raceMode) api.rollOff();
     },
     duck(on) { if (master) try { master.gain.rampTo(on ? 0.3 : 0.85, 0.3); } catch (e) {} },
     nav() { if (ready) try { click.triggerAttackRelease('C6', '16n'); } catch (e) {} },
@@ -1013,6 +1079,62 @@ const Sound = (() => {
         if (win) { chords.triggerAttackRelease(['C4','E4','G4','B4'], '2n', t + 0.62, 0.5); api.cheer(); }
       } catch (e) {}
     },
+    // How loud the floor is overall, 0 to 1. Exposed because I cannot hear this
+    // and you can: chairchase.com/?floor=40 will try it at 40 percent without a
+    // deploy, and ?floor=0 turns it off entirely.
+    floorLevel(v) { floorScale = Math.max(0, Math.min(2, v)); },
+
+    // Which floor you are on. Called once when a track is built.
+    surface(kind) {
+      surf = SURFACES[kind] || SURFACES.carpet;
+      if (!ready || !roll) return;
+      try {
+        roll.type = surf.noise;
+        rollFilt.Q.value = surf.q;
+        rollLfo.min = 1 - surf.depth;
+        rollLfo2.min = 1 - surf.depth * 0.5;
+        rollVerb.gain.rampTo(0, 0.15);            // re-set by the next roll()
+      } catch (e) {}
+    },
+
+    // Called every frame while driving. Speed sets both how loud and how bright,
+    // which between them are most of what tells surfaces apart: carpet stays dull
+    // however fast you go, lino gets glassy.
+    //
+    // Smoothed here rather than by the caller because a filter frequency jumping
+    // per frame is audible as a warble, and because this is fed from a physics
+    // speed that changes abruptly on impacts.
+    roll(speed, sliding, moving) {
+      if (!ready || !roll || !surf) return;
+      const v = Math.max(0, Math.min(1, Math.sqrt(Math.abs(speed) / 46)));
+      // A slide is a scrub rather than a roll: louder, and rougher.
+      const wantLvl = moving ? surf.lvl * floorScale * v * (sliding ? 1.45 : 1) : 0;
+      const wantCut = surf.lo + (surf.hi - surf.lo) * Math.min(1, v * (sliding ? 1.25 : 1));
+      // The important one. Impacts per second rises with speed, and that rate is
+      // what the ear reads as rolling. Held back at very low speed so it ticks
+      // rather than hums.
+      const wantRate = surf.rate[0] + (surf.rate[1] - surf.rate[0]) * v;
+      rollLvl += (wantLvl - rollLvl) * 0.14;
+      rollCut += (wantCut - rollCut) * 0.16;
+      rollRate += (wantRate - rollRate) * 0.12;
+      try {
+        rollGain.gain.value = rollLvl;
+        rollVerb.gain.value = rollLvl * surf.verb;
+        rollFilt.frequency.value = Math.max(80, rollCut);
+        rollLfo.frequency.value = Math.max(4, rollRate);
+        // Deliberately not a whole-number ratio, so the two never lock together
+        // into a single steady tone.
+        rollLfo2.frequency.value = Math.max(5, rollRate * 1.37 + 3);
+      } catch (e) {}
+    },
+
+    // Anything that is not driving: menus, pauses, results.
+    rollOff() {
+      rollLvl = 0;
+      if (!ready || !rollGain) return;
+      try { rollGain.gain.rampTo(0, 0.25); rollVerb.gain.rampTo(0, 0.25); } catch (e) {}
+    },
+
     toggleMute() { try { const d = Tone.getDestination(); d.mute = !d.mute; return d.mute; } catch (e) { return false; } }
   };
   return api;
@@ -1106,7 +1228,7 @@ function pickRivalNames(n) {
   return Array.from({ length: n }, (_, i) => names[i] + ' from ' + depts[i]);
 }
 const MAPS = {
-  office: { name:'Open Office', desc:'Tall sweeping open-plan circuit', floor:0x9aa3ad, wall:0xcbb894, road:0x8892a0,
+  office: { surface:'carpet', name:'Open Office', desc:'Tall sweeping open-plan circuit', floor:0x9aa3ad, wall:0xcbb894, road:0x8892a0,
             ceil:'#d9d3c6', lightTile:'#fff6dc', sky:0xd8d2c4, fog:0xd8d2c4,
             path:[
       [26.8,-112.2], [-4,-111.1], [-32.6,-110.7], [-47.6,-109],
@@ -1134,10 +1256,10 @@ const MAPS = {
       [135.4,-99.3], [132.1,-105.2], [127.3,-110.2], [119.3,-113.6],
       [108.1,-116], [88.7,-116.6], [55.7,-114.4]
     ] },
-  warehouse: { name:'Warehouse', desc:'Wide fast warehouse circuit', floor:0x7d7f85, wall:0xb08d57, road:0x6a6d73,
+  warehouse: { surface:'concrete', name:'Warehouse', desc:'Wide fast warehouse circuit', floor:0x7d7f85, wall:0xb08d57, road:0x6a6d73,
             ceil:'#b9bcc2', lightTile:'#eef4ff', sky:0xb4b8bf, fog:0xb4b8bf,
             path:[[230,13.3],[227.3,26.6],[218.8,38.9],[205.3,49.1],[188,56.4],[129.9,67.8],[109.9,72.5],[91.2,79],[74.1,87.1],[58.8,96.7],[21.9,126.9],[7,136.3],[-11.2,142.8],[-31.5,145.8],[-52.2,145.2],[-71.9,141],[-124,118.9],[-142,110.3],[-158.6,100.7],[-173.8,90.1],[-187.5,78.6],[-199.5,66.4],[-217.7,43.7],[-224.7,30.4],[-225.7,16.4],[-220.5,2.8],[-209.6,-9.3],[-193.9,-18.9],[-146.9,-40.8],[-131.2,-51],[-118.6,-62.9],[-109.3,-76.1],[-95.7,-108.6],[-87.2,-122.1],[-73.4,-133.7],[-55.4,-142.5],[-34.5,-147.8],[18.5,-151.9],[39.5,-151],[58.8,-145.6],[74.3,-136.3],[84.2,-124.2],[92.6,-92.5],[99.3,-78.9],[112.4,-67.4],[130.4,-59.2],[177.1,-49.8],[195.9,-44.3],[211.5,-35.5],[222.8,-24.3],[228.8,-11.4]] },
-  startup: { name:'The Startup', desc:'Move fast. Drift faster. Ship never.', theme:'startup',
+  startup: { surface:'lino', name:'The Startup', desc:'Move fast. Drift faster. Ship never.', theme:'startup',
             floor:0x9a9a9e, wall:0x8a4b3a, road:0x6f737b,
             ceil:'#d0d1d4', lightTile:'#eaf1ff', sky:0xd2cfca, fog:0xd2cfca,
             path:[
@@ -1158,11 +1280,11 @@ const MAPS = {
       [145.6,-69.6], [152,-86.4], [146.4,-100], [129.6,-107.2],
       [105.6,-104.8], [82.4,-96.8]
     ] },
-  carpark: { name:'Level -2', desc:'Permit required. Nobody has one.', theme:'carpark',
+  carpark: { surface:'deck', name:'Level -2', desc:'Permit required. Nobody has one.', theme:'carpark',
             floor:0x6e6c68, wall:0x7d7b76, road:0x5a5854,
             ceil:'#4a4845', lightTile:'#ffd9a0', sky:0x2a2c30, fog:0x2a2c30,
             path:[[123,66],[110.5,66],[97.9,66],[85.4,66],[72.9,66],[60.3,66],[47.8,66],[35.3,66],[22.8,66],[10.2,66],[-2.3,66],[-14.8,66],[-27.4,66],[-39.9,66],[-52.4,66],[-65,66],[-77.5,66],[-89.9,65.4],[-100.6,59.6],[-106.4,48.9],[-105.8,36.7],[-98.7,26.8],[-87.5,22.1],[-75,22],[-62.5,22],[-50,22],[-37.5,22],[-25,22],[-12.5,22],[0,22],[12.5,22],[25,22],[37.5,22],[50,22],[62.5,22],[75,22],[87.5,21.9],[98.7,17.2],[105.8,7.3],[106.4,-4.9],[100.6,-15.6],[89.9,-21.4],[77.5,-22],[65,-22],[52.5,-22],[40,-22],[27.5,-22],[15,-22],[2.5,-22],[-10,-22],[-22.5,-22],[-35,-22],[-47.5,-22],[-60,-22],[-72.5,-22],[-85,-22],[-96.7,-25.4],[-104.8,-34.5],[-106.9,-46.5],[-102.2,-57.7],[-92.3,-64.8],[-80,-66],[-67.5,-66],[-55,-66],[-42.5,-66],[-30,-66],[-17.5,-66],[-5,-66],[7.5,-66],[20,-66],[32.5,-66],[45,-66],[57.5,-66],[70,-66],[82.5,-66],[95.1,-66],[107.8,-66],[120.5,-66],[132.5,-63.8],[141.6,-55.7],[145,-44],[145,-31.4],[145,-18.9],[145,-6.3],[145,6.3],[145,18.9],[145,31.4],[145,44],[141.6,55.7],[132.5,63.8]] },
-  hq: { name:'Headquarters', desc:'Glass, greenery and unlimited cold brew', theme:'hq',
+  hq: { surface:'lino', name:'Headquarters', desc:'Glass, greenery and unlimited cold brew', theme:'hq',
             floor:0x6d8f56, wall:0xc6cdc8, road:0x9d9c96,
             ceil:'#dfeef7', lightTile:'#ffffff', sky:0x9ed2ef, fog:0xcfe6f3,
             path:[[144.4,9],[139.6,15.3],[135.7,22.1],[132.5,29.3],[130.3,36.9],[129.1,44.7],[128.7,52.6],[129.4,60.4],[137.4,99.8],[138,107.7],[136.7,115.6],[133.6,122.9],[128.7,129.2],[122.5,134.2],[115.3,137.5],[107.5,139],[99.6,138.5],[61.7,131.8],[53.7,131.4],[45.7,131.9],[37.8,133.3],[30.2,135.6],[22.9,138.9],[16,143],[9.7,147.9],[-20.6,174],[-27.6,177.5],[-35.3,179.2],[-43.2,178.9],[-50.7,176.7],[-57.5,172.7],[-63.1,167.1],[-67.1,160.3],[-79.3,119.2],[-82,111.8],[-85.6,104.8],[-90.1,98.3],[-95.4,92.5],[-101.4,87.4],[-108.1,83.1],[-115.2,79.7],[-152.9,67.5],[-160,64.2],[-166.1,59.3],[-170.8,53.1],[-173.9,45.9],[-175.2,38.3],[-174.6,30.5],[-172.1,23.1],[-168,16.5],[-144.2,-12.7],[-140,-19.3],[-136.6,-26.4],[-134,-33.8],[-132.4,-41.4],[-131.6,-49.2],[-131.7,-57.1],[-132.8,-64.8],[-140.4,-104.8],[-139.9,-112.7],[-137.5,-120.2],[-133.3,-126.9],[-127.6,-132.3],[-120.8,-136.1],[-113.2,-138.2],[-105.3,-138.2],[-64.3,-128.4],[-56.4,-127],[-48.3,-126.7],[-40.3,-127.4],[-32.5,-129.2],[-24.9,-132],[-17.8,-135.7],[-11.2,-140.4],[18.1,-167.6],[24.4,-172.2],[31.7,-175],[39.5,-176],[47.2,-175],[54.5,-172.2],[60.9,-167.6],[65.9,-161.6],[69.2,-154.5],[81.8,-117],[85.2,-109.9],[89.4,-103.2],[94.4,-97.1],[100.1,-91.7],[106.4,-87],[113.3,-83.1],[120.6,-80],[156.4,-67.2],[163,-62.9],[168.4,-57.1],[172.2,-50.2],[174.2,-42.6],[174.4,-34.7],[172.6,-27],[169.1,-20]] }
@@ -4643,6 +4765,7 @@ function buildScene(mapKey) {
 
   placePickups();
   // Same schedule, same hazards, same order, on every machine in the room.
+  Sound.surface(M.surface);
   eventRnd = netSession() ? mulberry32(worldSeed(mapKey) ^ 0x9e3779b9) : Math.random;
   withSeed(eventRnd, () => startEvents(mapKey));
 }
@@ -6238,6 +6361,11 @@ function animate() {
     // everyone sat frozen on the grid on everyone else's screen, and with no lap
     // or progress arriving, both players read themselves as leading.
     if (freeDrive || netRace || netSpectate) Net.tick(dt);
+
+    // The floor. Driven from whoever the camera is following, so a spectator
+    // hears the chair they are watching rather than silence.
+    const ear = racers[playerIdx];
+    if (ear) Sound.roll(ear.speed, ear.driftActive, active);
     updateAbilities(dt, active);
     racerCollisions();
     updateParticles(dt);
@@ -6488,6 +6616,9 @@ function pauseGame() {
   if (mode !== 'race' || !running || paused || raceOver) return;
   paused = true; clearInput();
   Sound.duck(true);
+  // The frame loop stops here, so the floor has to be told. Left alone it would
+  // hold its last level and hiss quietly underneath the pause menu.
+  Sound.rollOff();
   document.getElementById('pause').classList.remove('hidden');
 }
 function resumeGame() {
@@ -6792,6 +6923,14 @@ async function renderBoard() {
 
 // Twenty, unless the address bar says otherwise. Clamped, so a stray value
 // cannot empty the board or ask the server for something it will not return.
+// The floor level, from the address bar. Same idea as ?board: this is a thing
+// only an ear can judge, and reading a number off a URL beats redeploying to try
+// one. ?floor=0 silences it, ?floor=40 halves it, absent leaves it as built.
+(function () {
+  const v = parseInt(new URLSearchParams(location.search).get('floor'), 10);
+  if (Number.isFinite(v)) Sound.floorLevel(Math.max(0, Math.min(200, v)) / 100);
+})();
+
 function boardCut() {
   const v = parseInt(new URLSearchParams(location.search).get('board'), 10);
   return Number.isFinite(v) ? Math.max(1, Math.min(20, v)) : 20;
