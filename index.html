@@ -6728,7 +6728,12 @@ async function renderBoard() {
       '<span class="ch">' + (boardBy === 'lap' ? 'Chair' : 'Races') + '</span>' +
       '<span class="dl"></span>' +
       '<span class="tm">' + (boardBy === 'dist' ? 'Distance' : boardBy === 'hr' ? 'Complaints' : 'Best lap') + '</span>';
-    const top20 = rows.slice(0, 20);
+    // How many rows count as "the top of the board". Twenty normally, but
+    // overridable from the address bar, because the part of this screen that
+    // matters most is invisible until more than twenty people have played — and
+    // that is exactly when you cannot test it. Visit with ?board=2 and the third
+    // player down is already looking at the view a hundredth player would see.
+    const top20 = rows.slice(0, boardCut());
     top20.forEach((e, i) => list.appendChild(boardRow(e, i + 1, me)));
 
     // Everything below is for the person who is not in that list. Twenty
@@ -6772,6 +6777,13 @@ async function renderBoard() {
     note.textContent += ' \u00b7 you are ' + note.dataset.rank;
     delete note.dataset.rank;
   }
+}
+
+// Twenty, unless the address bar says otherwise. Clamped, so a stray value
+// cannot empty the board or ask the server for something it will not return.
+function boardCut() {
+  const v = parseInt(new URLSearchParams(location.search).get('board'), 10);
+  return Number.isFinite(v) ? Math.max(1, Math.min(20, v)) : 20;
 }
 
 // One row builder for both halves of the board, so a row in the window looks
