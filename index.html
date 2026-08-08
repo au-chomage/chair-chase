@@ -748,6 +748,27 @@
   /* Down a tenth from where it was, to buy back the height the join row costs. */
   .titleLogo { width:min(423px,43.2vw); height:auto; display:block; margin:0 0 6px; filter:drop-shadow(0 8px 14px rgba(0,0,0,.45)); }
   @media (max-width:600px){ .titleLogo{ width:min(342px,73.8vw); margin-left:auto; margin-right:auto; } }
+  /* ---- title screen on a narrow screen ----
+     At the end of the sheet for the same reason as the block below it: the base
+     rules live further down than the early max-width breakpoint does, so half of
+     what that block says was quietly being overridden. */
+  @media (max-width:600px) {
+    /* Was zero on the left against 16 on the right, so the whole button column
+       sat off centre and the skewed corners bled off the edge of the screen. */
+    #start.title { padding-left:calc(16px + var(--sal)); padding-right:calc(16px + var(--sar)); }
+    .titleInner { max-width:min(500px,100%); }
+    .titleLogo { width:min(300px,68vw); }
+    /* Name field, buttons, join row and tagline all share one measure. Four
+       different widths stacked up read as ragged rather than as a menu. */
+    .nameRow { width:min(490px,100%); margin:12px auto 4px; }
+    .nameInput { width:100%; }
+    .joinRow { align-items:center; margin:12px auto 0; }
+    .tagline { margin:12px auto 0; }
+    /* Pinned to the bottom right of the viewport, which on a narrow screen is
+       exactly where the tagline ends up. Back into the flow it goes. */
+    #studio { position:static; margin-top:16px; align-self:center; padding-bottom:0; }
+  }
+
   /* ---- title screen on a short, wide screen ----
      A landscape phone gives about 330 pixels of height for a logo, a name field,
      four buttons, a join line and a tagline. Scoped to short AND wide so a phone
