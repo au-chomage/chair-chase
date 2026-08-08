@@ -4979,7 +4979,7 @@ const INFIELD = {
       const roll = Math.random();
       if (roll < 0.86) return { obj: makeBenchRun(), rad: 4.2 };
       if (roll < 0.94) return { obj: makeMeetingPod(8.4, 6.4, 2.6, false), rad: 4.4 };
-      return { obj: makeBigPlant(), rad: 1.6 };
+      return { obj: makeInfieldPlant(), rad: 1.6 };
     }
   },
   warehouse: {
@@ -5006,6 +5006,32 @@ const INFIELD = {
       if (roll < 0.86) return { obj: makeRacking(4, 3), rad: 4.8 };
       if (roll < 0.95) return { obj: makeStockStack(), rad: 4.2 };
       return { obj: makeForklift(), rad: 2.4 };
+    }
+  },
+  startup: {
+    // This one barely has an infield. The circuit is a serpentine that doubles
+    // back on itself, so instead of one big middle it encloses two pockets, and
+    // the deepest point in either is only 44 units off the track. Hence the tight
+    // clearance and the small cell: at office settings the whole map came out
+    // with three objects in it. The proximity test above is what keeps that
+    // clearance from planting a desk inside a filing cabinet.
+    clear: 24,
+    cell: 10,
+    landmark: () => ({ obj: makeAllHands(), rad: 10 }),
+    thin: (c, r) => !!((c + r) % 2),
+    pick(c, r) {
+      if (mod(c, 3) === 0 && mod(r, 3) === 0)
+        return { obj: makeColumn(1.2, 0x4a4a52), rad: 1.1 };
+      if (mod(c, 5) === 0) return null;   // fewer walkways: there is little enough floor as it is
+      // Deliberately few types. With only five chunks of floor to spread across,
+      // every extra kind of thing shows up in every chunk and costs its draws
+      // everywhere. Meeting pods are left out because the lap already runs past
+      // two glass ones on the trackside.
+      const roll = Math.random();
+      if (roll < 0.62) return { obj: makeStartupDesks(), rad: 4.0 };
+      if (roll < 0.82) return { obj: makeBreakout(), rad: 3.4 };
+      if (roll < 0.94) return { obj: makePhoneBooths(), rad: 2.9 };
+      return { obj: makeInfieldPlant(), rad: 1.6 };
     }
   }
 };
@@ -5065,24 +5091,149 @@ function makeBenchRun() {
 
 // Opaque frosted panels rather than glass. Transparency would mean sort order and
 // a second pass over the same pixels, for a look nobody can resolve from the track.
-function makeMeetingPod(w, d, h, sign) {
+// `o` repaints it for a map with a different palette; the defaults are the office.
+function makeMeetingPod(w, d, h, sign, o) {
+  o = o || {};
   const g = new THREE.Group();
-  const wall = lam(0xd8d3c6);
+  const wall = lam(o.wall || 0xd8d3c6);
   for (const s of [-1, 1]) {
     const a = new THREE.Mesh(BoxG(w, h, 0.14), wall);
     a.position.set(0, h / 2, s * d / 2); g.add(a);
     const b = new THREE.Mesh(BoxG(0.14, h, d), wall);
     b.position.set(s * w / 2, h / 2, 0); g.add(b);
+    // A lit band round the outside. On an after-hours map an unlit box is just a
+    // black hole in the middle of the floor.
+    if (o.glow) {
+      const ga = new THREE.Mesh(PlaneG(w * 0.9, 0.34), glowMat(o.glow, 1.3));
+      ga.position.set(0, h * 0.62, s * (d / 2 + 0.09));
+      if (s < 0) ga.rotation.y = Math.PI;
+      g.add(ga);
+      const gb = new THREE.Mesh(PlaneG(d * 0.9, 0.34), glowMat(o.glow, 1.3));
+      gb.position.set(s * (w / 2 + 0.09), h * 0.62, 0);
+      gb.rotation.y = s * Math.PI / 2;
+      g.add(gb);
+    }
   }
-  const roof = new THREE.Mesh(BoxG(w, 0.12, d), lam(0xbdb8ab));
+  const roof = new THREE.Mesh(BoxG(w, 0.12, d), lam(o.roof || 0xbdb8ab));
   roof.position.y = h; g.add(roof);
-  const table = new THREE.Mesh(BoxG(w * 0.5, 0.12, d * 0.34), wood(0x9c7248));
+  const table = new THREE.Mesh(BoxG(w * 0.5, 0.12, d * 0.34), wood(o.table || 0x9c7248));
   table.position.y = 1.4; g.add(table);
   if (sign) {
-    const s1 = new THREE.Mesh(PlaneG(w * 0.44, 0.5), glowMat(0x5ce8f2, 1.9));
+    const s1 = new THREE.Mesh(PlaneG(w * 0.44, 0.5), glowMat(o.sign || 0x5ce8f2, 1.9));
     s1.position.set(0, h * 0.72, d / 2 + 0.09); g.add(s1);
     const s2 = s1.clone(); s2.position.z = -d / 2 - 0.09; s2.rotation.y = Math.PI; g.add(s2);
   }
+  return g;
+}
+
+// makeBigPlant randomises both its blob radius and its leaf tint, which is right
+// for a handful of trackside props and wrong out here: the batcher keys on
+// geometry and material, so thirty scattered plants became thirty draw calls.
+// This is the same plant with the dice taken out.
+function makeInfieldPlant() {
+  const g = new THREE.Group();
+  const pot = new THREE.Mesh(CylG(0.7, 0.55, 1.2, 10), clay(0x9c6b4a));
+  pot.position.y = 0.6; g.add(pot);
+  const leaf = lam(0x3f8f4a);
+  for (let i = 0; i < 3; i++) {
+    const b = new THREE.Mesh(SphG(1.0, 8, 6), leaf);
+    b.position.set((i - 1) * 0.72, 2.05 + (i === 1 ? 0.65 : 0), (i - 1) * 0.42);
+    g.add(b);
+  }
+  return g;
+}
+
+// ---- the startup floor, after hours ----
+// Everyone has gone home and left the monitors on, so almost everything out here
+// reads as a dark silhouette with something lit stuck to it. That suits the budget:
+// an unlit MeshBasicMaterial is the cheapest surface in the scene.
+function makeStartupDesks() {
+  const L = 8.4;
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(BoxG(L, 0.12, 2.6), lam(0x18181c));
+  top.position.y = 1.4; g.add(top);
+  for (const s of [-1, 1]) {
+    const leg = new THREE.Mesh(BoxG(0.14, 1.4, 2.2), metal(0x111114));
+    leg.position.set(s * (L / 2 - 0.5), 0.7, 0); g.add(leg);
+  }
+  // Underlighting spilling onto the lino, which at this range is most of what you
+  // actually see of a desk pod.
+  const spill = new THREE.Mesh(PlaneG(L, 3.8), glowMat(0x9f2fff, 0.75));
+  spill.rotation.x = -Math.PI / 2; spill.position.y = 0.05; g.add(spill);
+  for (let k = 0; k < 4; k++) {
+    const s = k < 2 ? -1 : 1, x = ((k % 2) ? 1 : -1) * 2.1;
+    // Same dark lam as the desk slab rather than a second near-black. Two colours
+    // nobody can tell apart at this range cost one draw call each.
+    const mon = new THREE.Mesh(BoxG(0.9, 0.55, 0.06), lam(0x18181c));
+    mon.position.set(x, 1.78, s * 0.55); g.add(mon);
+    // Held at 1.0 so the screens read as lit without crossing the bloom threshold.
+    // Four hundred blooming monitors would flare the whole map white.
+    const scr = new THREE.Mesh(PlaneG(0.8, 0.46), glowMat(0x2f6fff, 1.0));
+    scr.position.set(x, 1.78, s * 0.62);
+    if (s < 0) scr.rotation.y = Math.PI;
+    g.add(scr);
+    const chair = new THREE.Mesh(BoxG(0.85, 1.4, 0.85), lam(0x2b2d33));
+    chair.position.set(x, 0.7, s * 2.3); g.add(chair);
+  }
+  return g;
+}
+
+function makePhoneBooths() {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const x = (i - 1) * 1.75;
+    const b = new THREE.Mesh(BoxG(1.5, 2.6, 1.5), lam(0x2b2d33));
+    b.position.set(x, 1.3, 0); g.add(b);
+    for (const s of [-1, 1]) {
+      const win = new THREE.Mesh(PlaneG(1.0, 1.5), glowMat(0x5ce8f2, 1.3));
+      win.position.set(x, 1.5, s * 0.79);
+      if (s < 0) win.rotation.y = Math.PI;
+      g.add(win);
+    }
+  }
+  return g;
+}
+
+function makeBreakout() {
+  const g = new THREE.Group();
+  const rug = new THREE.Mesh(PlaneG(7, 5.4), lam(0x3a3340));
+  rug.rotation.x = -Math.PI / 2; rug.position.y = 0.04; g.add(rug);
+  const cols = [0xd98a3a, 0x4f9fd0];
+  for (let i = 0; i < 4; i++) {
+    if (Math.random() < 0.22) continue;
+    const b = makeBeanBag(cols[i % 2]);
+    b.position.set(-2.1 + (i % 2) * 4.2, 0, -1.4 + Math.floor(i / 2) * 2.8);
+    g.add(b);
+  }
+  const table = new THREE.Mesh(BoxG(1.6, 0.4, 1.6), wood(0x8a6a44));
+  table.position.y = 0.2; g.add(table);
+  return g;
+}
+
+// The landmark. A wall-sized screen still playing to an empty room, which is
+// visible from most of the lap precisely because everything else is dark.
+function makeAllHands() {
+  const g = new THREE.Group();
+  const plat = new THREE.Mesh(BoxG(17, 0.35, 12), lam(0x2a2c34));
+  plat.position.y = 0.18; g.add(plat);
+  const board = new THREE.Mesh(BoxG(13, 5.2, 0.3), lam(0x14161c));
+  board.position.set(0, 2.95, -5.2); g.add(board);
+  for (const s of [-1, 1]) {
+    const scr = new THREE.Mesh(PlaneG(12, 4.4), glowMat(0x2f6fff, 1.8));
+    scr.position.set(0, 2.95, -5.2 + s * 0.17);
+    if (s < 0) scr.rotation.y = Math.PI;
+    g.add(scr);
+  }
+  const cols = [0xd98a3a, 0x4f9fd0, 0x9f6fd0];
+  for (let i = 0; i < 8; i++) {
+    const b = makeBeanBag(cols[i % 3]);
+    b.position.set(-5.6 + (i % 4) * 3.7, 0.35, -0.4 + Math.floor(i / 4) * 3.2);
+    g.add(b);
+  }
+  // One neon sign, not a hundred: each one builds its own canvas texture and its
+  // own material for the flicker to animate.
+  const sign = makeNeonSign('ALL HANDS', '#ff7fd0');
+  sign.position.set(0, 6.1, -5.2); g.add(sign);
   return g;
 }
 
@@ -5112,13 +5263,28 @@ function buildInfield(mapKey, batcher) {
     }
   }
 
+  // decorate() has already scattered props inward from the track, and scatterSpot
+  // only ever tests distance to the centreline, never distance to anything else.
+  // Skipping cells that already have something standing in them is what lets the
+  // clearance come in tight on a map with no room to spare.
+  const busy = [];
+  for (const o of obstacles) busy.push([o.position.x, o.position.z, (o.userData && o.userData.radius) || 1.5]);
+  for (const s of contactSpots) busy.push([s.x, s.z, s.r]);
+
   const grid = new Map();
   const thin = lowDetailWorld();
   const cells = [];
   for (let c = minC; c <= maxC; c++) {
     for (let r = minR; r <= maxR; r++) {
       if (near.has(c + ',' + r)) continue;
-      if (!insideCircuit(c * C, r * C)) continue;
+      const x = c * C, z = r * C;
+      if (!insideCircuit(x, z)) continue;
+      let clash = false;
+      for (let b = 0; b < busy.length; b++) {
+        const dx = x - busy[b][0], dz = z - busy[b][1], keep = 4.6 + busy[b][2];
+        if (dx * dx + dz * dz < keep * keep) { clash = true; break; }
+      }
+      if (clash) continue;
       cells.push([c, r]);
     }
   }
