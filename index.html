@@ -5324,6 +5324,284 @@ function makeAllHands() {
   return g;
 }
 
+// ---------- the perimeter ----------
+// The building wall is a flat slab from floor to ceiling, so looking outward from
+// the track you get scattered props, then bare carpet, then a featureless face.
+// The face is the part you actually notice, and dressing a line is far cheaper
+// than filling the floor behind it: one run of repeated bays rather than a region.
+//
+// The depth limit is what makes this free of consequences. Racers are clamped
+// 1.4 units short of the inner face, so anything that stands off the wall by less
+// than that can never be touched. No collision, and the run-off stays exactly as
+// forgiving as it was, which matters out here in a way it never did in the
+// infield: this is the side you end up on when a race goes wrong.
+const PERIM_DEPTH = 1.15;
+const PERIM_BAY = 18;        // fixed, so every bay shares one set of geometry
+const PERIM_CHUNK = 8;       // bays per culling chunk, about 144 units of wall
+
+// The default bay. Glass, a head rail, a sill and the radiator under it, which is
+// where the office cardigan lives.
+function makeGlazingBay(w) {
+  const g = new THREE.Group();
+  const trim = lam(0xe8e4da);
+  const gh = 4.25, gy = 1.15 + gh / 2;
+  // Held below the bloom threshold on purpose. A hundred bays of blown-out
+  // daylight would flare the whole floor white.
+  const glass = new THREE.Mesh(PlaneG(w - 0.7, gh), glowMat(0xbcd8e6, 1.25));
+  glass.position.set(0, gy, 0.06); g.add(glass);
+  // A darker band low down, so it reads as a horizon rather than a flat panel.
+  const far = new THREE.Mesh(PlaneG(w - 0.7, 0.9), glowMat(0x9fb7c4, 1.0));
+  far.position.set(0, 1.95, 0.07); g.add(far);
+  // One mullion per bay, on one edge. The next bay along supplies the other.
+  const mull = new THREE.Mesh(BoxG(0.35, gh + 0.5, 0.3), trim);
+  mull.position.set(-w / 2, gy, 0.15); g.add(mull);
+  const head = new THREE.Mesh(BoxG(w, 0.45, 0.32), trim);
+  head.position.set(0, 5.6, 0.16); g.add(head);
+  const sill = new THREE.Mesh(BoxG(w, 0.16, 0.45), trim);
+  sill.position.set(0, 1.1, 0.22); g.add(sill);
+  const rad = new THREE.Mesh(BoxG(w * 0.62, 0.62, 0.3), lam(0xe9e6df));
+  rad.position.set(0, 0.62, 0.2); g.add(rad);
+  return g;
+}
+
+function makeDoorBay(w, o) {
+  o = o || {};
+  const g = new THREE.Group();
+  const frame = new THREE.Mesh(BoxG(3.4, 3.3, 0.28), lam(o.frame || 0xd8d3c6));
+  frame.position.set(0, 1.65, 0.14); g.add(frame);
+  const leaf = o.steel
+    ? new THREE.Mesh(BoxG(2.8, 2.8, 0.16), metal(0x8b9099))
+    : new THREE.Mesh(BoxG(2.8, 2.8, 0.16), wood(0x9c7248));
+  leaf.position.set(0, 1.4, 0.3); g.add(leaf);
+  const sign = new THREE.Mesh(PlaneG(1.5, 0.42), glowMat(0x4fbf6a, 1.9));
+  sign.position.set(0, 3.62, 0.32); g.add(sign);
+  return g;
+}
+
+function makeLiftLobby(w) {
+  const g = new THREE.Group();
+  const surround = new THREE.Mesh(BoxG(w, 4.3, 0.3), lam(0xb9b3a4));
+  surround.position.set(0, 2.15, 0.15); g.add(surround);
+  for (const s of [-1, 1]) {
+    const door = new THREE.Mesh(BoxG(2.4, 3.2, 0.18), metal(0x9aa0ad));
+    door.position.set(s * 3.4, 1.6, 0.32); g.add(door);
+    const split = new THREE.Mesh(BoxG(0.08, 3.2, 0.22), lam(0x6f7480));
+    split.position.set(s * 3.4, 1.6, 0.42); g.add(split);
+    const ind = new THREE.Mesh(PlaneG(0.9, 0.3), glowMat(0xffb03a, 1.9));
+    ind.position.set(s * 3.4, 3.55, 0.43); g.add(ind);
+  }
+  return g;
+}
+
+function makeStorageBay(w) {
+  const g = new THREE.Group();
+  const cw = w / 4;
+  for (let i = 0; i < 4; i++) {
+    const x = -w / 2 + cw * (i + 0.5);
+    const unit = new THREE.Mesh(BoxG(cw - 0.3, 2.4, 0.9), lam(0xd8d3c6));
+    unit.position.set(x, 1.2, 0.5); g.add(unit);
+    for (let l = 0; l < 3; l++) {
+      if (Math.random() < 0.28) continue;
+      const f = new THREE.Mesh(BoxG(cw - 0.7, 0.5, 0.7), cardboard());
+      f.position.set(x, 0.6 + l * 0.72, 0.55); g.add(f);
+    }
+  }
+  return g;
+}
+
+// ---- the warehouse wall ----
+// Clad, not glazed. A distribution shed takes its daylight from a strip up high,
+// where it clears the racking, and gives the rest of the wall over to doors.
+function makeCladBay(w) {
+  const g = new THREE.Group();
+  const trim = metal(0x8b9099);
+  // Clerestory at 5.6, deliberately above the 5.8 of the infield racking so the
+  // wall still reads as a wall from the far side of the lap.
+  const glass = new THREE.Mesh(PlaneG(w - 1.2, 1.05), glowMat(0xd6e4ee, 1.3));
+  glass.position.set(0, 5.95, 0.06); g.add(glass);
+  const head = new THREE.Mesh(BoxG(w, 0.22, 0.26), trim);
+  head.position.set(0, 6.6, 0.13); g.add(head);
+  const rail = new THREE.Mesh(BoxG(w, 0.22, 0.26), trim);
+  rail.position.set(0, 5.3, 0.13); g.add(rail);
+  const mid = new THREE.Mesh(BoxG(w, 0.18, 0.2), trim);
+  mid.position.set(0, 3.1, 0.1); g.add(mid);
+  // Bumper rail at chair height, which is the only part of this wall anything
+  // ever gets close to.
+  const kick = new THREE.Mesh(BoxG(w, 0.5, 0.34), lam(0x4a4d54));
+  kick.position.set(0, 0.42, 0.17); g.add(kick);
+  return g;
+}
+
+function makeDockBay(w) {
+  const g = new THREE.Group();
+  const shutter = new THREE.Mesh(BoxG(5.2, 4.6, 0.22), metal(0xc0c5cc));
+  shutter.position.set(0, 2.3, 0.11); g.add(shutter);
+  const housing = new THREE.Mesh(BoxG(5.8, 0.7, 0.42), metal(0x8b9099));
+  housing.position.set(0, 4.95, 0.21); g.add(housing);
+  for (const s of [-1, 1]) {
+    const bump = new THREE.Mesh(BoxG(0.45, 1.1, 0.5), lam(0x2b2e36));
+    bump.position.set(s * 3.0, 0.55, 0.25); g.add(bump);
+  }
+  const num = new THREE.Mesh(PlaneG(1.6, 0.55), glowMat(0xffb03a, 1.9));
+  num.position.set(0, 5.7, 0.08); g.add(num);
+  return g;
+}
+
+// The office that watches the doors. Flush to the wall, because anything with a
+// balcony on it would break the stand-off limit and become something you can hit.
+function makeDockOffice(w) {
+  const g = new THREE.Group();
+  const skin = new THREE.Mesh(BoxG(w, 3.4, 0.35), lam(0xd8d3c6));
+  skin.position.set(0, 4.6, 0.17); g.add(skin);
+  const band = new THREE.Mesh(PlaneG(w - 3, 1.5), glowMat(0xfff0c8, 1.75));
+  band.position.set(0, 5.0, 0.36); g.add(band);
+  const stair = new THREE.Mesh(BoxG(1.3, 2.9, 0.5), metal(0x8b9099));
+  stair.position.set(w / 2 - 1.6, 1.45, 0.25); g.add(stair);
+  const door = new THREE.Mesh(BoxG(1.5, 2.6, 0.18), metal(0x8b9099));
+  door.position.set(-w / 2 + 2.2, 1.3, 0.28); g.add(door);
+  return g;
+}
+
+// ---- the startup wall, after hours ----
+// Brick piers and full-height glazing, which is the loft an early-stage company
+// signs a lease on. At this hour the glass is darker than the wall it sits in, so
+// what carries this side of the room is the lit edges: coves washing the floor,
+// screens nobody turned off, and the neon over reception.
+function makeNightGlazingBay(w) {
+  const g = new THREE.Group();
+  // Held under 1.0 on purpose. This is glass looking out at a dark street, not a
+  // light source, and eighty bays of it would lift the whole map.
+  const glass = new THREE.Mesh(PlaneG(w - 1.1, 5.1), glowMat(0x1b2733, 0.85));
+  glass.position.set(0, 3.15, 0.06); g.add(glass);
+  // A band of whatever is still lit across the street.
+  const city = new THREE.Mesh(PlaneG(w - 1.1, 0.5), glowMat(0xd8a862, 1.15));
+  city.position.set(0, 2.2, 0.07); g.add(city);
+  const pier = new THREE.Mesh(BoxG(1.0, 7.2, 0.35), lam(0x6f3d2f));
+  pier.position.set(-w / 2, 3.6, 0.17); g.add(pier);
+  const head = new THREE.Mesh(BoxG(w, 0.4, 0.3), lam(0x2a2c34));
+  head.position.set(0, 5.9, 0.15); g.add(head);
+  const cove = new THREE.Mesh(BoxG(w - 1.1, 0.14, 0.35), glowMat(0x5ce8f2, 1.5));
+  cove.position.set(0, 0.5, 0.18); g.add(cove);
+  return g;
+}
+
+function makeScreenWall(w) {
+  const g = new THREE.Group();
+  const back = new THREE.Mesh(BoxG(w - 2.4, 3.6, 0.25), lam(0x14161c));
+  back.position.set(0, 3.0, 0.12); g.add(back);
+  for (let c = 0; c < 3; c++) {
+    for (let r = 0; r < 2; r++) {
+      const scr = new THREE.Mesh(PlaneG(3.6, 1.3), glowMat(0x2f6fff, 1.35));
+      scr.position.set((c - 1) * 4.2, 2.2 + r * 1.6, 0.26); g.add(scr);
+    }
+  }
+  const cove = new THREE.Mesh(BoxG(w - 1.1, 0.14, 0.35), glowMat(0x5ce8f2, 1.5));
+  cove.position.set(0, 0.5, 0.18); g.add(cove);
+  return g;
+}
+
+function makeStartupDoorBay(w) {
+  const g = new THREE.Group();
+  const frame = new THREE.Mesh(BoxG(4.0, 3.6, 0.3), lam(0x2a2c34));
+  frame.position.set(0, 1.8, 0.15); g.add(frame);
+  const leaf = new THREE.Mesh(BoxG(3.2, 3.0, 0.16), glowMat(0x1b2733, 0.9));
+  leaf.position.set(0, 1.5, 0.31); g.add(leaf);
+  const edge = new THREE.Mesh(PlaneG(3.4, 0.16), glowMat(0xff7fd0, 1.9));
+  edge.position.set(0, 3.52, 0.33); g.add(edge);
+  const cove = new THREE.Mesh(BoxG(w - 1.1, 0.14, 0.35), glowMat(0x5ce8f2, 1.5));
+  cove.position.set(0, 0.5, 0.18); g.add(cove);
+  return g;
+}
+
+// The landmark, and the only real neon out here. One sign, not a wall of them:
+// each one builds its own canvas texture and its own material for the flicker
+// loop to animate.
+function makeReceptionWall(w) {
+  const g = new THREE.Group();
+  const panel = new THREE.Mesh(BoxG(w, 5.4, 0.32), lam(0x24262e));
+  panel.position.set(0, 3.0, 0.16); g.add(panel);
+  const desk = new THREE.Mesh(BoxG(w * 0.5, 1.1, 0.55), wood(0x8a6a44));
+  desk.position.set(0, 0.55, 0.3); g.add(desk);
+  const wash = new THREE.Mesh(PlaneG(w * 0.8, 0.3), glowMat(0x7fff9f, 1.6));
+  wash.position.set(0, 1.42, 0.34); g.add(wash);
+  const sign = makeNeonSign('OPEN LATE', '#ff7fd0');
+  sign.position.set(0, 4.2, 0.5); g.add(sign);
+  return g;
+}
+
+// One entry per map that dresses its wall. `pick` returns a bay for position i
+// along a run, or null to leave the wall bare.
+const PERIMETER = {
+  office: {
+    pick(i, w, faceIdx) {
+      // Two lift lobbies, one on each long wall, roughly a third of the way
+      // along. They are the only thing out here worth navigating by.
+      if ((faceIdx === 0 || faceIdx === 1) && i === 5) return makeLiftLobby(w);
+      // Spaced so that plenty of chunks come out as pure glazing. Every extra kind
+      // of bay in a chunk is its own set of instanced draws, whether that chunk
+      // holds one of them or five.
+      if (mod(i, 9) === 4) return makeDoorBay(w);
+      if (mod(i, 13) === 9) return makeStorageBay(w);
+      return makeGlazingBay(w);
+    }
+  },
+  warehouse: {
+    pick(i, w, faceIdx) {
+      // One dock office per long wall, over the middle of a run of doors.
+      if ((faceIdx === 0 || faceIdx === 1) && i === 7) return makeDockOffice(w);
+      // Docks are dense on a real shed, and they are the thing that says
+      // warehouse from across the map. Every fourth bay.
+      if (mod(i, 4) === 2) return makeDockBay(w);
+      if (mod(i, 15) === 11) return makeDoorBay(w, { frame: 0xa8adb5, steel: true });
+      return makeCladBay(w);
+    }
+  },
+  startup: {
+    pick(i, w, faceIdx) {
+      // One reception, on one wall. Two would mean two neon textures and two
+      // signs reading the same thing at each other across the building.
+      if (faceIdx === 0 && i === 4) return makeReceptionWall(w);
+      if (mod(i, 7) === 3) return makeStartupDoorBay(w);
+      if (mod(i, 11) === 6) return makeScreenWall(w);
+      return makeNightGlazingBay(w);
+    }
+  }
+};
+
+function buildPerimeter(mapKey, batcher) {
+  const CFG = PERIMETER[mapKey];
+  if (!CFG || !bounds) return;
+  const BX = bounds.x, BZ = bounds.z;
+  // Local space for a bay is +X along the wall and +Z into the room, so each face
+  // is the same module turned to point inward.
+  const faces = [
+    { rot: 0,            len: BX * 2, at: u => [u, -BZ] },
+    { rot: Math.PI,      len: BX * 2, at: u => [u,  BZ] },
+    { rot: Math.PI / 2,  len: BZ * 2, at: u => [-BX, u] },
+    { rot: -Math.PI / 2, len: BZ * 2, at: u => [ BX, u] }
+  ];
+  const thin = lowDetailWorld();
+  for (let f = 0; f < faces.length; f++) {
+    const face = faces[f];
+    // A whole number of fixed-width bays, centred, with the remainder left as
+    // bare wall at each end. Sizing bays to fit exactly would give every face its
+    // own geometry and split one instanced draw into four.
+    const n = Math.floor(face.len / PERIM_BAY);
+    if (n < 2) continue;
+    const start = -(n * PERIM_BAY) / 2;
+    for (let i = 0; i < n; i++) {
+      if (thin && (i % 2)) continue;
+      const obj = CFG.pick(i, PERIM_BAY, f);
+      if (!obj) continue;
+      const [x, z] = face.at(start + PERIM_BAY * (i + 0.5));
+      obj.position.set(x, 0, z);
+      obj.rotation.y = face.rot;
+      obj.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+      batcher.add(obj, 'perim' + f + '_' + Math.floor(i / PERIM_CHUNK));
+    }
+  }
+}
+
 function buildInfield(mapKey, batcher) {
   infieldGrid = null;
   const CFG = INFIELD[mapKey];
@@ -5611,6 +5889,8 @@ function buildScene(mapKey) {
         batcher.add(t2, 'treeline');
       }
     }
+    // Dress the inside of that wall, now that we know where it is.
+    buildPerimeter(mapKey, batcher);
   }
   for (let i = 0; i < WP_COUNT; i += 2) {
     // Level -2 uses pillars and parked cars as its edge; the campus uses hedges,
