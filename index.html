@@ -6646,6 +6646,20 @@ function animateRider(r, dt) {
   }
 }
 
+// The middle of the race, as a progress value. Median rather than mean, because
+// one racer who has broken away or fallen apart should move the middle by one
+// place, not drag it halfway across the map.
+let fieldProgress = 0;
+const _progBuf = [];
+function medianProgress() {
+  _progBuf.length = 0;
+  for (const r of racers) if (!r.finished) _progBuf.push(r.progress || 0);
+  const n = _progBuf.length;
+  if (!n) return 0;
+  _progBuf.sort((a, b) => a - b);
+  return (n % 2) ? _progBuf[(n - 1) / 2] : (_progBuf[n / 2 - 1] + _progBuf[n / 2]) / 2;
+}
+
 function updateRacer(r, dt, controlsOn) {
   const S = r.stats;
   if (r.driftBoostT > 0) r.driftBoostT -= dt;
@@ -6772,11 +6786,25 @@ function updateRacer(r, dt, controlsOn) {
     let tSpeed = maxS * ai.skill * (controlsOn && !r.finished ? 1 : 0);
     if (Math.abs(diff) > 0.45) tSpeed *= 0.62;
     if (ai.braking > 0) tSpeed *= 0.62;
-    // Rubber-band, now asymmetric: a rival that has broken away eases off harder
-    // than one that is chasing, so the leader stays catchable while the pack
-    // behind stays a genuine threat rather than fading away.
-    const gap = r.progress - racers[playerIdx].progress;
-    tSpeed *= gap > 0 ? (1 - Math.min(gap, 42) / 42 * 0.15) : (1 + Math.min(-gap, 42) / 42 * 0.22);
+    // Rubber band, in two parts.
+    //
+    // Against the player, asymmetric, as it always was: a rival that has broken
+    // away eases off harder than one that is chasing, so the leader stays
+    // catchable while the pack behind stays a genuine threat.
+    const pGap = r.progress - racers[playerIdx].progress;
+    let band = pGap > 0 ? (1 - Math.min(pGap, 42) / 42 * 0.15)
+                        : (1 + Math.min(-pGap, 42) / 42 * 0.22);
+    // Against the middle of the field, gently. This half is new, and it is the
+    // whole point. Every rival used to read one number, its gap to you, so two
+    // rivals running side by side were scaled identically and could never
+    // converge on each other. Nothing ever happened in this race that you were
+    // not personally in the middle of. Now a rival ahead of the field eases and
+    // one behind it pushes, so places change further up the road and you arrive
+    // to find a fight already going on.
+    const fGap = r.progress - fieldProgress;
+    band *= fGap > 0 ? (1 - Math.min(fGap, 34) / 34 * 0.09)
+                     : (1 + Math.min(-fGap, 34) / 34 * 0.11);
+    tSpeed *= band;
     if (r.speed < tSpeed) r.speed += S.accel * accelM * dt;
     else r.speed -= S.accel * 1.2 * dt;
     // Boost is spent where it pays rather than at random: on a straight, and much
@@ -7821,6 +7849,9 @@ function animate() {
     // The one structural change multiplayer forces. A remote chair's position is
     // a fact that arrived over the wire, not something to work out from inputs,
     // so it never enters the physics.
+    // Where the middle of the field is, worked out once rather than per racer.
+    // The AI rubber band reads it below.
+    fieldProgress = medianProgress();
     for (const r of racers) r.isRemote ? updateRemote(r, dt) : updateRacer(r, dt, controlsOn);
     // Races need this every bit as much as free drive does. Gating it on
     // freeDrive alone meant nobody sent a single position frame during a race:
