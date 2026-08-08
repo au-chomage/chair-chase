@@ -58,7 +58,10 @@
   .brand span { display:block; font-size:clamp(58px,13vw,138px); color:#fff; -webkit-text-stroke:7px #0f1519; paint-order:stroke; filter:drop-shadow(5px 7px 0 rgba(0,0,0,.4)); }
   .brand .l2 { margin-left:.5em; color:#35b6c4; }
   .brand.small span { font-size:clamp(38px,8vw,72px); -webkit-text-stroke:5px #0f1519; }
-  .tagline { font-family:Verdana,sans-serif; font-weight:normal; font-size:clamp(13px,1.8vw,17px); color:#e2ebed; margin:20px 0 0; max-width:32ch; line-height:1.35; text-shadow:1px 1px 3px rgba(0,0,0,.7); }
+  /* Broken by hand into two lines. 32ch wrapped the second sentence onto a third
+     line, and the break belongs between the sentences rather than wherever the
+     measure happens to land. */
+  .tagline { font-family:Verdana,sans-serif; font-weight:normal; font-size:clamp(13px,1.8vw,17px); color:#e2ebed; margin:20px 0 0; max-width:46ch; line-height:1.35; text-shadow:1px 1px 3px rgba(0,0,0,.7); }
   #start.title { align-items:flex-start; justify-content:center; padding-left:7vw; background:linear-gradient(90deg, rgba(9,14,17,.95) 0%, rgba(9,14,17,.86) 26%, rgba(9,14,17,.5) 52%, rgba(9,14,17,.08) 74%, rgba(9,14,17,0) 88%); }
   .titleInner { text-align:left; max-width:min(500px,92vw); }
   @media (max-width:600px){
@@ -69,6 +72,7 @@
        and a single column of four is unremarkable on a phone. */
     .titleBtns { grid-template-columns:1fr; }
     .titleBtns .go { padding:13px 18px; }
+    .joinRow { align-items:center; margin-left:auto; margin-right:auto; }
   }
   button.go { margin-top:28px; font:inherit; font-size:20px; font-style:italic; letter-spacing:2px; text-transform:uppercase; color:#0c1418; background:#35b6c4; border:none; padding:14px 46px; cursor:pointer; transform:skewX(-8deg); }
   button.go:hover { background:#5ccbd7; transform:skewX(-8deg) translateY(-2px); box-shadow:0 7px 0 rgba(0,0,0,.28); }
@@ -358,6 +362,9 @@
     .tagline { margin-top:10px; font-size:12px; }
     button.go { margin-top:14px; }
     .titleBtns { margin-top:12px; row-gap:9px; }
+    .joinRow { margin-top:9px; gap:7px; }
+    .joinLink { font-size:11.5px; }
+    .codeInput { font-size:16px; padding:7px 4px 7px 9px; }
     #results .standings { font-size:14px; margin-top:6px; }
     #results .standings li { padding:5px 14px; margin:3px 0; }
     #resultMedal { font-size:34px; }
@@ -539,6 +546,32 @@
   .nameInput:focus { border-color:#5ce8f2; background:rgba(9,14,17,.9); }
   .titleBtns { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
 
+  /* ---- joining by code ----
+     Collapsed to one line of text at rest. The title screen already carries a
+     logo, a name field, four buttons and a tagline, and on a landscape phone
+     there are about 330 pixels for all of it. A permanently open field would
+     have cost three lines to serve the less urgent of the two paths. */
+  /* Left aligned to sit under the button column, since the desktop title screen
+     is a left-hand panel over the scene. The narrow breakpoint centres it along
+     with everything else. */
+  .joinRow { margin-top:14px; display:flex; flex-direction:column; align-items:flex-start; gap:9px;
+    width:min(490px,100%); }
+  .joinLink { font:inherit; font-family:Verdana,sans-serif; font-weight:bold; font-size:12.5px;
+    letter-spacing:.4px; color:#7fa3ab; background:none; border:none; padding:4px 6px; cursor:pointer;
+    text-decoration:underline; text-underline-offset:3px; text-decoration-color:rgba(127,163,171,.45); }
+  .joinLink:hover { color:#bfe4ea; text-decoration-color:rgba(191,228,234,.7); }
+  .joinRow .joinOpen { display:flex; gap:0; align-items:stretch; }
+  .joinRow .joinOpen.hidden { display:none; }
+  .codeInput { font:inherit; font-size:17px; letter-spacing:6px; text-transform:uppercase; text-align:center;
+    color:#eaf7f9; background:rgba(9,14,17,.72); border:2px solid rgba(53,182,196,.55); border-right:none;
+    padding:9px 4px 9px 10px; width:min(150px,42vw); outline:none; }
+  .codeInput::placeholder { color:#5d7f87; letter-spacing:4px; }
+  .codeInput:focus { border-color:#5ce8f2; background:rgba(9,14,17,.92); }
+  .joinRow .copyBtn { padding:0 18px; }
+  .joinErr { font-family:Verdana,sans-serif; font-weight:normal; font-size:12px; color:#e8a06a;
+    margin:0; max-width:34ch; }
+  .joinErr.hidden { display:none; }
+
   #results .brand.small { padding-bottom:6px; }
   #board .brand { margin-bottom:26px; }
   .boardTabs { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:14px 0 18px; }
@@ -712,8 +745,32 @@
   #splash.hide { opacity:0; pointer-events:none; }
   #splash img { width:min(640px,84vw); height:auto; filter:drop-shadow(0 14px 34px rgba(0,0,0,.55)); animation:splashPop .7s cubic-bezier(.2,.8,.3,1.2); }
   @keyframes splashPop { 0%{transform:scale(.84); opacity:0;} 55%{opacity:1;} 100%{transform:scale(1); opacity:1;} }
-  .titleLogo { width:min(470px,48vw); height:auto; display:block; margin:0 0 6px; filter:drop-shadow(0 8px 14px rgba(0,0,0,.45)); }
-  @media (max-width:600px){ .titleLogo{ width:min(380px,82vw); margin-left:auto; margin-right:auto; } }
+  /* Down a tenth from where it was, to buy back the height the join row costs. */
+  .titleLogo { width:min(423px,43.2vw); height:auto; display:block; margin:0 0 6px; filter:drop-shadow(0 8px 14px rgba(0,0,0,.45)); }
+  @media (max-width:600px){ .titleLogo{ width:min(342px,73.8vw); margin-left:auto; margin-right:auto; } }
+  /* ---- title screen on a short, wide screen ----
+     A landscape phone gives about 330 pixels of height for a logo, a name field,
+     four buttons, a join line and a tagline. Scoped to short AND wide so a phone
+     held in portrait keeps its single column of full-width buttons. */
+  @media (max-height:560px) and (min-width:601px) {
+    /* Cap by height rather than width: on a short screen the constraint is
+       vertical, and 43vw of an 852 wide phone is a third of the viewport. */
+    .titleLogo { width:auto; max-width:86vw; max-height:15vh; margin-bottom:2px; }
+    /* Trimmed on the title only. The other screens are shorter and can keep the
+       breathing room. Safe-area insets stay, since this is where notches live. */
+    #start.title { padding-top:calc(12px + var(--sat)); padding-bottom:calc(14px + var(--sab)); }
+    .nameRow { margin:8px 0 2px; }
+    .nameInput { font-size:15px; padding:8px 12px; }
+    /* The two ways to play keep a full-width row each; the two reference items
+       share one. That is a whole button row of height back. */
+    .titleBtns { display:grid; grid-template-columns:1fr 1fr; column-gap:12px; row-gap:7px; margin-top:8px; }
+    .titleBtns .go { width:auto; margin-top:0; min-height:38px; padding:6px 14px; font-size:15px; }
+    .titleBtns #startBtn, .titleBtns #netBtn { grid-column:1 / -1; }
+    .joinRow { margin-top:8px; gap:6px; }
+    .joinLink { font-size:11px; padding:2px 4px; }
+    .codeInput { font-size:15px; padding:6px 4px 6px 8px; }
+    .tagline { margin-top:7px; font-size:11.5px; line-height:1.28; }
+  }
 </style>
 </head>
 <body>
@@ -857,7 +914,16 @@
       <button class="go alt" id="boardBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><rect x="3" y="12" width="5" height="9" fill="currentColor"/><rect x="9.5" y="6" width="5" height="15" fill="currentColor"/><rect x="16" y="9" width="5" height="12" fill="currentColor"/></svg></span>Leaderboard</button>
       <button class="go alt" id="aboutBtn"><span class="ico"><svg viewBox="0 0 24 24" width="0.9em" height="0.9em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="10.7" y="10" width="2.6" height="8" fill="currentColor"/><rect x="10.7" y="5.6" width="2.6" height="2.8" fill="currentColor"/></svg></span>About</button>
     </div>
-    <p class="tagline">Fast chairs. Slow promotions. Productivity has officially been postponed.</p>
+    <div class="joinRow">
+      <button class="joinLink" id="joinToggle">Been sent a code? Get started here.</button>
+      <div class="joinOpen hidden" id="joinOpen">
+        <input id="joinCode" class="codeInput" type="text" maxlength="40" placeholder="CODE"
+               autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code">
+        <button class="copyBtn" id="joinGo">Join</button>
+      </div>
+      <p class="joinErr hidden" id="joinErr"></p>
+    </div>
+    <p class="tagline">Fast chairs. Slow promotions.<br>Productivity has officially been postponed.</p>
   </div>
   <a id="studio" href="https://auchomage.com/" target="_blank" rel="noopener noreferrer">au ch&ocirc;mage studios &copy;</a>
 </div>
@@ -8752,6 +8818,12 @@ const Net = (() => {
 // ---------- lobby ----------
 const lobbyEl = document.getElementById('lobby');
 const lobbyNote = document.getElementById('lobbyNote');
+// A room is a Durable Object addressed by name, so idFromName never fails: it
+// finds the room or quietly makes one. A mistyped code therefore does not error,
+// it drops you alone into a lobby that looks completely normal while your
+// colleague waits somewhere else. This flag is what lets the lobby say so, and
+// it lives up here because renderLobby reads it.
+let joinedByCode = false;
 const netChip = document.getElementById('netChip');
 const specBar = document.getElementById('specBar');
 
@@ -8842,6 +8914,12 @@ function renderLobby() {
     warn = true;
   } else if (raceLive) {
     note = 'A race is under way. Watch it, and you will be on the grid for the next one.';
+  } else if (Net.count < 2 && joinedByCode) {
+    // Typing a code and landing in an empty room almost always means a typo,
+    // because the room you meant to join had somebody in it. Say so rather than
+    // letting it look like a normal wait.
+    note = 'Room ' + Net.code + ' is empty. Check the code with them, or stay and share this one.';
+    warn = true;
   } else if (Net.count < 2) {
     note = 'Send the link to a colleague. You can drive now and they will appear when they arrive.';
   } else if (host) {
@@ -9251,10 +9329,65 @@ function endFreeDrive() {
 document.getElementById('netBtn').onclick = () => {
   Sound.unlock(); Sound.select();
   Leaderboard.setName(cleanName(nameInput.value));
+  joinedByCode = false;
   if (!RACE_URL.trim()) { showLobby(); return; }
   Net.connect(makeRoomCode());
   showLobby();
 };
+
+// ---------- joining a room by its code ----------
+const joinToggle = document.getElementById('joinToggle');
+const joinOpen = document.getElementById('joinOpen');
+const joinCode = document.getElementById('joinCode');
+const joinErr = document.getElementById('joinErr');
+
+function joinFail(msg) {
+  joinErr.textContent = msg;
+  joinErr.classList.toggle('hidden', !msg);
+}
+
+// Accepts a bare code or a whole shared link, because people copy the link and
+// paste it into the box. Anything outside the code alphabet is dropped as it is
+// typed rather than accepted and rejected later: a typed O can never be right,
+// so there is no point letting it sit there looking plausible.
+function cleanCode(raw) {
+  const s = String(raw || '').toUpperCase();
+  const link = s.match(/#R=([A-Z0-9]{4,6})/);
+  const body = link ? link[1] : s;
+  let out = '';
+  for (const ch of body) if (CODE_ALPHABET.indexOf(ch) >= 0) out += ch;
+  return out.slice(0, 4);
+}
+
+function openJoin() {
+  joinOpen.classList.remove('hidden');
+  joinToggle.classList.add('hidden');
+  joinFail('');
+  joinCode.focus();
+}
+
+joinToggle.onclick = () => { Sound.unlock(); Sound.click(); openJoin(); };
+
+joinCode.addEventListener('input', () => {
+  const c = cleanCode(joinCode.value);
+  if (joinCode.value !== c) joinCode.value = c;
+  joinFail('');
+});
+joinCode.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+
+function doJoin() {
+  const code = cleanCode(joinCode.value);
+  if (code.length < 4) { joinFail('Room codes are four characters.'); return; }
+  Sound.unlock(); Sound.select();
+  Leaderboard.setName(cleanName(nameInput.value));
+  joinFail('');
+  joinedByCode = true;
+  if (!RACE_URL.trim()) { showLobby(); return; }
+  Net.connect(code);
+  showLobby();
+}
+
+document.getElementById('joinGo').onclick = doJoin;
 
 document.getElementById('lobbyCopy').onclick = async () => {
   const btn = document.getElementById('lobbyCopy');
@@ -9286,7 +9419,14 @@ document.getElementById('lobbyLeaveBtn').onclick = () => {
   Sound.back();
   endFreeDrive();
   Net.leave();
+  joinedByCode = false;
   lobbyEl.classList.add('hidden');
+  // Collapse the code row again, so coming back to the title is the same title
+  // screen you left rather than one with a field hanging open on it.
+  joinOpen.classList.add('hidden');
+  joinToggle.classList.remove('hidden');
+  joinCode.value = '';
+  joinFail('');
   showTitle();
 };
 
@@ -9294,6 +9434,9 @@ document.getElementById('lobbyLeaveBtn').onclick = () => {
 function joinFromHash() {
   const m = (location.hash || '').match(/^#r=([A-Za-z0-9]{4,6})$/);
   if (!m) return false;
+  // A link always carries a code that existed when it was made, so an empty room
+  // here means everyone has gone home, not that anything was mistyped.
+  joinedByCode = false;
   if (!RACE_URL.trim()) { showLobby(); return true; }
   Net.connect(m[1]);
   showLobby();
@@ -9315,6 +9458,7 @@ addEventListener('hashchange', () => {
   // tore the new connection down and started another, over and over, so a fresh
   // room sat on "Connecting..." for ever.
   if (Net.code === code) return;
+  joinedByCode = false;
   endFreeDrive(); endNetRace(); endSpectate();
   Net.leave();
   Net.connect(code);
